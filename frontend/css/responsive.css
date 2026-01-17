@@ -1,0 +1,207 @@
+/* Responsive styles for mobile devices */
+
+@media (max-width: 768px) {
+    /* Show sidebar toggle */
+    .sidebar-toggle {
+        display: block;
+    }
+
+    /* Sidebar becomes overlay on mobile */
+    .sidebar {
+        position: fixed;
+        top: 0;
+        left: 0;
+        height: 100%;
+        z-index: 99;
+        transform: translateX(-100%);
+        transition: transform 0.3s ease;
+    }
+
+    .sidebar.open {
+        transform: translateX(0);
+    }
+
+    /* Overlay when sidebar is open */
+    .sidebar-overlay {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: rgba(0, 0, 0, 0.3);
+        z-index: 98;
+        display: none;
+    }
+
+    .sidebar-overlay.visible {
+        display: block;
+    }
+
+    /* Chat header adjustments */
+    .chat-header {
+        padding-left: 4rem;
+    }
+
+    /* Messages adjustments */
+    .message-inner {
+        padding: 0 1rem;
+        gap: 1rem;
+    }
+
+    .message {
+        padding: 1rem 0;
+    }
+
+    /* Input area adjustments */
+    .input-area {
+        padding: 0.75rem 1rem;
+    }
+
+    /* Modal adjustments */
+    .modal-content {
+        width: 95%;
+        max-height: 85vh;
+    }
+}
+
+@media (max-width: 480px) {
+    /* Smaller sidebar on very small screens */
+    .sidebar {
+        width: 280px;
+    }
+
+    /* Smaller font sizes */
+    .logo {
+        font-size: 1.1rem;
+    }
+
+    .chat-title {
+        font-size: 0.9rem;
+    }
+
+    .message-content {
+        font-size: 0.95rem;
+    }
+
+    .message-role {
+        width: 26px;
+        height: 26px;
+        font-size: 0.65rem;
+    }
+
+    /* Modal body spacing */
+    .modal-body {
+        padding: 1rem;
+    }
+
+    .setting-group {
+        margin-bottom: 1rem;
+    }
+}
+
+/* Landscape mode on mobile */
+@media (max-height: 500px) and (orientation: landscape) {
+    .modal-content {
+        max-height: 95vh;
+    }
+
+    .modal-body {
+        padding: 0.75rem 1rem;
+    }
+
+    .setting-group {
+        margin-bottom: 0.75rem;
+    }
+}
+
+/* Tablet adjustments */
+@media (min-width: 769px) and (max-width: 1024px) {
+    .sidebar {
+        width: 240px;
+    }
+
+    .message-inner {
+        max-width: 680px;
+    }
+
+    .input-container {
+        max-width: 680px;
+    }
+}
+
+/* Large screens */
+@media (min-width: 1400px) {
+    .message-inner {
+        max-width: 900px;
+    }
+
+    .input-container {
+        max-width: 900px;
+    }
+
+    .translate-content {
+        max-width: 1000px;
+    }
+}
+
+/* Translate responsive - desktop horizontal layout */
+@media (min-width: 769px) {
+    .translate-content {
+        flex-direction: row;
+        align-items: stretch;
+    }
+
+    .translate-section {
+        flex: 1;
+    }
+
+    .swap-btn {
+        align-self: center;
+        margin-top: 2rem;
+    }
+}
+
+/* Translate responsive - mobile adjustments */
+@media (max-width: 768px) {
+    .translate-content {
+        padding: 1rem;
+    }
+
+    .translate-section textarea {
+        min-height: 100px;
+    }
+
+    .translate-header {
+        padding-left: 4rem;
+    }
+
+    .translate-actions {
+        padding: 0.75rem 1rem;
+    }
+
+    .translate-btn {
+        flex: 1;
+    }
+}
+
+@media (max-width: 480px) {
+    .mode-tabs {
+        gap: 0.25rem;
+    }
+
+    .mode-tab {
+        padding: 0.4rem 0.5rem;
+        font-size: 0.8rem;
+    }
+
+    .translate-section textarea {
+        min-height: 80px;
+        font-size: 0.95rem;
+    }
+
+    .swap-btn {
+        width: 36px;
+        height: 36px;
+        font-size: 1.1rem;
+    }
+}

@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="icon" type="image/png" href="/images/ULF-icon-1-black.png">
+    <title>ULF web - Chat</title>
+    <link rel="stylesheet" href="/css/main.css">
+    <link rel="stylesheet" href="/css/responsive.css">
+</head>
+<body>
+    <div class="app">
+        <!-- Sidebar -->
+        <aside class="sidebar" id="sidebar">
+            <div class="sidebar-header">
+                <div class="logo">
+                    <img src="/images/ULF-icon-1-black.png" alt="ULF" class="logo-icon">
+                    <span>ULF web</span>
+                </div>
+                <div class="mode-tabs">
+                    <button class="mode-tab active" id="chat-tab">Chat</button>
+                    <button class="mode-tab" id="translate-tab">Translate</button>
+                </div>
+                <button class="new-chat-btn" id="new-chat-btn">
+                    <span class="icon">+</span>
+                    New Chat
+                </button>
+            </div>
+            <div class="conversations-list" id="conversations-list">
+                <!-- Conversations will be loaded here -->
+            </div>
+            <div class="sidebar-footer">
+                <button class="settings-btn" id="settings-btn">
+                    <span class="icon">&#9881;</span>
+                    Settings
+                </button>
+            </div>
+        </aside>
+
+        <!-- Mobile sidebar toggle -->
+        <button class="sidebar-toggle" id="sidebar-toggle">&#9776;</button>
+
+        <!-- Main chat area -->
+        <main class="chat-area panel" id="chat-panel">
+            <div class="chat-header" id="chat-header">
+                <h2 class="chat-title" id="chat-title">Select a conversation</h2>
+            </div>
+            <div class="messages" id="messages">
+                <div class="empty-state" id="empty-state">
+                    <p>Start a new conversation or select one from the sidebar</p>
+                </div>
+            </div>
+            <div class="input-area" id="input-area">
+                <div class="input-container">
+                    <textarea
+                        id="message-input"
+                        placeholder="Type your message..."
+                        rows="1"
+                        disabled
+                    ></textarea>
+                    <button class="send-btn" id="send-btn" disabled>
+                        <span class="icon">&#10148;</span>
+                    </button>
+                    <button class="stop-btn hidden" id="stop-btn">
+                        <span class="icon">&#9632;</span>
+                    </button>
+                </div>
+            </div>
+        </main>
+
+        <!-- Translate area -->
+        <main class="translate-area panel hidden" id="translate-panel">
+            <div class="translate-header">
+                <h2>Translation</h2>
+            </div>
+            <div class="translate-content">
+                <div class="translate-section">
+                    <select id="source-language"></select>
+                    <textarea id="source-text" placeholder="Enter text to translate..."></textarea>
+                </div>
+                <button class="swap-btn" id="swap-languages" title="Swap languages">
+                    <span class="icon">&#8596;</span>
+                </button>
+                <div class="translate-section">
+                    <select id="target-language"></select>
+                    <textarea id="target-text" placeholder="Translation will appear here..." readonly></textarea>
+                </div>
+            </div>
+            <div class="translate-actions">
+                <button class="translate-btn" id="translate-btn">Translate</button>
+                <button class="stop-btn hidden" id="translate-stop-btn">
+                    <span class="icon">&#9632;</span>
+                    Stop
+                </button>
+            </div>
+        </main>
+    </div>
+
+    <!-- Settings Modal -->
+    <div class="modal hidden" id="settings-modal">
+        <div class="modal-overlay" id="modal-overlay"></div>
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>Settings</h2>
+                <button class="close-btn" id="close-settings">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="setting-group">
+                    <label for="temperature">
+                        Temperature: <span id="temperature-value">0.7</span>
+                    </label>
+                    <input type="range" id="temperature" min="0" max="2" step="0.1" value="0.7">
+                </div>
+                <div class="setting-group">
+                    <label for="top-k">
+                        Top K: <span id="top-k-value">40</span>
+                    </label>
+                    <input type="range" id="top-k" min="1" max="100" step="1" value="40">
+                </div>
+                <div class="setting-group">
+                    <label for="top-p">
+                        Top P: <span id="top-p-value">0.9</span>
+                    </label>
+                    <input type="range" id="top-p" min="0" max="1" step="0.05" value="0.9">
+                </div>
+                <div class="setting-group">
+                    <label for="repeat-penalty">
+                        Repeat Penalty: <span id="repeat-penalty-value">1.1</span>
+                    </label>
+                    <input type="range" id="repeat-penalty" min="1" max="2" step="0.05" value="1.1">
+                </div>
+                <div class="setting-group">
+                    <label for="max-tokens">
+                        Max Tokens: <span id="max-tokens-value">2048</span>
+                    </label>
+                    <input type="range" id="max-tokens" min="256" max="8192" step="256" value="2048">
+                </div>
+                <div class="setting-group">
+                    <label for="system-prompt">System Prompt:</label>
+                    <textarea id="system-prompt" rows="4" placeholder="You are a helpful assistant."></textarea>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="save-btn" id="save-settings">Save Settings</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <script src="/js/api.js"></script>
+    <script src="/js/sse.js"></script>
+    <script src="/js/conversations.js"></script>
+    <script src="/js/chat.js"></script>
+    <script src="/js/settings.js"></script>
+    <script src="/js/translate.js"></script>
+    <script src="/js/app.js"></script>
+</body>
+</html>
