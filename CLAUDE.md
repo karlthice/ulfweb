@@ -9,12 +9,12 @@ ULF Web is a chat web application that provides a web interface to llama.cpp. It
 ## Development Commands
 
 ```bash
-# Activate virtual environment
-source venv/bin/activate
-
-# Run the server (development)
-python -m backend.main
+# Run the server (development) - no venv activation needed
+python3 -m backend.main
 # Server runs on http://0.0.0.0:8000 by default
+
+# If port is already in use, kill existing server first:
+pkill -f "python.*backend.main"
 
 # Install dependencies
 pip install -r requirements.txt

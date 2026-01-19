@@ -1,4 +1,4 @@
-"""Translation endpoint with SSE streaming using TranslateGemma."""
+"""Translation endpoint with SSE streaming using Tilde."""
 
 import json
 from typing import AsyncGenerator
@@ -40,7 +40,7 @@ async def stream_translation(
     source_lang: str,
     target_lang: str
 ) -> AsyncGenerator[str, None]:
-    """Stream translation response from TranslateGemma server."""
+    """Stream translation response from Tilde server."""
     source_name = LANGUAGE_NAMES.get(source_lang, source_lang)
     target_name = LANGUAGE_NAMES.get(target_lang, target_lang)
 
@@ -59,7 +59,7 @@ async def stream_translation(
         async with httpx.AsyncClient(timeout=None) as client:
             async with client.stream(
                 "POST",
-                f"{settings.translategemma.url}/v1/chat/completions",
+                f"{settings.tilde.url}/v1/chat/completions",
                 json=payload,
                 headers={"Content-Type": "application/json"}
             ) as response:
@@ -118,7 +118,7 @@ async def stream_translation(
         yield f"data: {json.dumps({'type': 'done'})}\n\n"
 
     except httpx.ConnectError:
-        yield f"data: {json.dumps({'type': 'error', 'content': 'Cannot connect to translation server. Is TranslateGemma running?'})}\n\n"
+        yield f"data: {json.dumps({'type': 'error', 'content': 'Cannot connect to translation server. Is Tilde running?'})}\n\n"
     except Exception as e:
         yield f"data: {json.dumps({'type': 'error', 'content': str(e)})}\n\n"
 

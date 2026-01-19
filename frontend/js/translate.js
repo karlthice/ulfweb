@@ -1,5 +1,5 @@
 /**
- * Translation module for TranslateGemma integration
+ * Translation module for Tilde integration
  */
 
 const translate = (function() {

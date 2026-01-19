@@ -51,7 +51,34 @@
                 </div>
             </div>
             <div class="input-area" id="input-area">
+                <div class="model-selector">
+                    <label for="chat-model">Server:</label>
+                    <select id="chat-model">
+                        <option value="">Loading...</option>
+                    </select>
+                    <span class="tokens-counter" id="tokens-counter"></span>
+                </div>
                 <div class="input-container">
+                    <input type="file" id="pdf-input" accept=".pdf" class="hidden">
+                    <input type="file" id="image-input" accept="image/*" class="hidden">
+                    <div class="attach-wrapper">
+                        <button class="attach-btn" id="attach-btn" title="Attach file">
+                            <span class="icon">&#128206;</span>
+                        </button>
+                        <div class="attach-menu hidden" id="attach-menu">
+                            <button class="attach-menu-item" id="attach-pdf">
+                                <span>&#128196;</span> PDF Document
+                            </button>
+                            <button class="attach-menu-item" id="attach-image">
+                                <span>&#128247;</span> Image
+                            </button>
+                        </div>
+                    </div>
+                    <div class="attachment-indicator hidden" id="attachment-indicator">
+                        <span class="attachment-name" id="attachment-name"></span>
+                        <button class="attachment-remove" id="attachment-remove">&times;</button>
+                    </div>
+                    <img class="image-preview hidden" id="image-preview" alt="Preview">
                     <textarea
                         id="message-input"
                         placeholder="Type your message..."
@@ -147,6 +174,10 @@
     </div>
 
     <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+    <script>
+        pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+    </script>
     <script src="/js/api.js"></script>
     <script src="/js/sse.js"></script>
     <script src="/js/conversations.js"></script>

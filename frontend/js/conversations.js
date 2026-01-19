@@ -12,6 +12,11 @@ const conversations = {
     async init() {
         await this.refresh();
         this.setupEventListeners();
+
+        // Auto-select the most recent conversation if one exists
+        if (this.list.length > 0) {
+            await this.select(this.list[0].id);
+        }
     },
 
     /**

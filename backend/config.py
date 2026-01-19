@@ -18,8 +18,8 @@ class LlamaConfig(BaseModel):
     url: str = "http://localhost:8080"
 
 
-class TranslateGemmaConfig(BaseModel):
-    url: str = "http://localhost:8082"
+class TildeConfig(BaseModel):
+    url: str = "http://localhost:8081"
 
 
 class DatabaseConfig(BaseModel):
@@ -33,12 +33,13 @@ class DefaultsConfig(BaseModel):
     repeat_penalty: float = 1.1
     max_tokens: int = 2048
     system_prompt: str = "You are a helpful assistant."
+    model: str = ""
 
 
 class Settings(BaseSettings):
     server: ServerConfig = ServerConfig()
     llama: LlamaConfig = LlamaConfig()
-    translategemma: TranslateGemmaConfig = TranslateGemmaConfig()
+    tilde: TildeConfig = TildeConfig()
     database: DatabaseConfig = DatabaseConfig()
     defaults: DefaultsConfig = DefaultsConfig()
 
@@ -61,8 +62,8 @@ def load_config(config_path: str | None = None) -> Settings:
     # Override with environment variables
     if os.getenv("ULFWEB_LLAMA_URL"):
         config_data.setdefault("llama", {})["url"] = os.getenv("ULFWEB_LLAMA_URL")
-    if os.getenv("ULFWEB_TRANSLATEGEMMA_URL"):
-        config_data.setdefault("translategemma", {})["url"] = os.getenv("ULFWEB_TRANSLATEGEMMA_URL")
+    if os.getenv("ULFWEB_TILDE_URL"):
+        config_data.setdefault("tilde", {})["url"] = os.getenv("ULFWEB_TILDE_URL")
     if os.getenv("ULFWEB_DATABASE_PATH"):
         config_data.setdefault("database", {})["path"] = os.getenv("ULFWEB_DATABASE_PATH")
     if os.getenv("ULFWEB_SERVER_HOST"):

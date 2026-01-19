@@ -14,18 +14,24 @@ class SSEHandler {
      * @param {function} onChunk - Callback for each content chunk
      * @param {function} onDone - Callback when streaming is complete
      * @param {function} onError - Callback for errors
+     * @param {string|null} imageBase64 - Optional base64-encoded image
      */
-    async streamMessage(conversationId, content, onChunk, onDone, onError) {
+    async streamMessage(conversationId, content, onChunk, onDone, onError, imageBase64 = null) {
         // Abort any existing stream
         this.abort();
 
         this.abortController = new AbortController();
 
         try {
+            const body = { content };
+            if (imageBase64) {
+                body.image = imageBase64;
+            }
+
             const response = await fetch(`/api/v1/chat/${conversationId}`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ content }),
+                body: JSON.stringify(body),
                 signal: this.abortController.signal
             });
 

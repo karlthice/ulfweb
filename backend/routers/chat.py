@@ -14,6 +14,7 @@ from backend.services.storage import (
     get_conversation,
     get_conversation_messages,
     get_or_create_user,
+    get_server,
     get_user_settings,
     touch_conversation,
     update_conversation,
@@ -33,7 +34,8 @@ def get_client_ip(request: Request) -> str:
 async def stream_chat_response(
     conversation_id: int,
     user_id: int,
-    user_message: str
+    user_message: str,
+    image_base64: str | None = None
 ) -> AsyncGenerator[str, None]:
     """Stream chat response from llama.cpp server."""
     # Save user message
@@ -53,11 +55,27 @@ async def stream_chat_response(
             "content": user_settings.system_prompt
         })
 
-    # Add conversation history
-    for msg in messages:
+    # Add conversation history (except the last user message, we'll add it with image if present)
+    for msg in messages[:-1]:  # Exclude last message (it's the current user message)
         llama_messages.append({
             "role": msg.role,
             "content": msg.content
+        })
+
+    # Add the current user message (with image if present)
+    if image_base64:
+        # Multimodal format for vision models
+        llama_messages.append({
+            "role": "user",
+            "content": [
+                {"type": "image_url", "image_url": {"url": image_base64}},
+                {"type": "text", "text": user_message}
+            ]
+        })
+    else:
+        llama_messages.append({
+            "role": "user",
+            "content": user_message
         })
 
     # Build request payload
@@ -71,13 +89,24 @@ async def stream_chat_response(
         "max_tokens": user_settings.max_tokens,
     }
 
+    # Determine server URL - use selected server from database if set
+    server_url = settings.llama.url
+    if user_settings.model:
+        try:
+            server_id = int(user_settings.model)
+            server = await get_server(server_id)
+            if server and server.active:
+                server_url = server.url
+        except (ValueError, TypeError):
+            pass  # Invalid server ID, use default
+
     assistant_content = ""
 
     try:
         async with httpx.AsyncClient(timeout=None) as client:
             async with client.stream(
                 "POST",
-                f"{settings.llama.url}/v1/chat/completions",
+                f"{server_url}/v1/chat/completions",
                 json=payload,
                 headers={"Content-Type": "application/json"}
             ) as response:
@@ -142,7 +171,7 @@ async def chat(conversation_id: int, data: ChatRequest, request: Request):
         raise HTTPException(status_code=404, detail="Conversation not found")
 
     return StreamingResponse(
-        stream_chat_response(conversation_id, user_id, data.content),
+        stream_chat_response(conversation_id, user_id, data.content, data.image),
         media_type="text/event-stream",
         headers={
             "Cache-Control": "no-cache",

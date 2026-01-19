@@ -52,6 +52,15 @@ CREATE TABLE IF NOT EXISTS messages (
 -- Indexes for common queries
 CREATE INDEX IF NOT EXISTS idx_conversations_user_id ON conversations(user_id);
 CREATE INDEX IF NOT EXISTS idx_messages_conversation_id ON messages(conversation_id);
+
+-- Servers (site-wide LLM backends)
+CREATE TABLE IF NOT EXISTS servers (
+    id INTEGER PRIMARY KEY,
+    friendly_name TEXT NOT NULL,
+    url TEXT NOT NULL,
+    active INTEGER DEFAULT 1,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
 """
 
 
@@ -63,6 +72,15 @@ async def init_database() -> None:
     async with aiosqlite.connect(db_path) as db:
         await db.executescript(SCHEMA)
         await db.commit()
+
+        # Migration: Add model column to user_settings if not exists
+        cursor = await db.execute("PRAGMA table_info(user_settings)")
+        columns = [row[1] for row in await cursor.fetchall()]
+        if "model" not in columns:
+            await db.execute(
+                "ALTER TABLE user_settings ADD COLUMN model TEXT DEFAULT ''"
+            )
+            await db.commit()
 
 
 @asynccontextmanager

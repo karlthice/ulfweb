@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="icon" type="image/png" href="/images/ULF-icon-1-black.png">
+    <title>ULF web - Admin</title>
+    <link rel="stylesheet" href="/css/main.css">
+    <link rel="stylesheet" href="/css/admin.css">
+</head>
+<body>
+    <div class="admin-container">
+        <header class="admin-header">
+            <div class="logo">
+                <img src="/images/ULF-icon-1-black.png" alt="ULF" class="logo-icon">
+                <span>ULF web - Admin</span>
+            </div>
+            <a href="/" class="back-link">Back to Chat</a>
+        </header>
+
+        <main class="admin-content">
+            <section class="admin-section">
+                <div class="section-header">
+                    <h2>Servers</h2>
+                    <button class="add-btn" id="add-server-btn">
+                        <span class="icon">+</span>
+                        Add Server
+                    </button>
+                </div>
+                <p class="section-description">Configure the LLM servers that ULF can connect to.</p>
+
+                <div class="servers-list" id="servers-list">
+                    <!-- Servers will be loaded here -->
+                </div>
+            </section>
+        </main>
+    </div>
+
+    <!-- Add/Edit Server Modal -->
+    <div class="modal hidden" id="server-modal">
+        <div class="modal-overlay" id="server-modal-overlay"></div>
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2 id="server-modal-title">Add Server</h2>
+                <button class="close-btn" id="close-server-modal">&times;</button>
+            </div>
+            <div class="modal-body">
+                <input type="hidden" id="server-id">
+                <div class="setting-group">
+                    <label for="server-name">Friendly Name</label>
+                    <input type="text" id="server-name" placeholder="e.g., Tilde AI">
+                </div>
+                <div class="setting-group">
+                    <label for="server-url">URL</label>
+                    <input type="text" id="server-url" placeholder="e.g., http://localhost:8081">
+                </div>
+                <div class="setting-group checkbox-group">
+                    <label>
+                        <input type="checkbox" id="server-active" checked>
+                        Active
+                    </label>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="save-btn" id="save-server-btn">Save Server</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="/js/admin.js"></script>
+</body>
+</html>

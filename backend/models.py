@@ -54,6 +54,7 @@ class UserSettings(BaseModel):
     repeat_penalty: float = Field(default=1.1, ge=1.0, le=2.0)
     max_tokens: int = Field(default=2048, ge=1, le=8192)
     system_prompt: str = ""
+    model: str = ""
 
 
 class UserSettingsUpdate(BaseModel):
@@ -63,11 +64,25 @@ class UserSettingsUpdate(BaseModel):
     repeat_penalty: float | None = Field(default=None, ge=1.0, le=2.0)
     max_tokens: int | None = Field(default=None, ge=1, le=8192)
     system_prompt: str | None = None
+    model: str | None = None
+
+
+# Model listing models (for llama.cpp /v1/models endpoint)
+class ModelInfo(BaseModel):
+    id: str
+    object: str = "model"
+    owned_by: str = "llama.cpp"
+
+
+class ModelListResponse(BaseModel):
+    object: str = "list"
+    data: list[ModelInfo] = []
 
 
 # Chat models
 class ChatRequest(BaseModel):
     content: str
+    image: str | None = None  # Optional base64-encoded image for vision models
 
 
 class ChatChunk(BaseModel):
@@ -82,3 +97,25 @@ class TranslateRequest(BaseModel):
     text: str
     source_lang: str
     target_lang: str
+
+
+# Server models (site-wide LLM backends)
+class ServerBase(BaseModel):
+    friendly_name: str
+    url: str
+    active: bool = True
+
+
+class Server(ServerBase):
+    id: int
+    created_at: datetime
+
+
+class ServerCreate(ServerBase):
+    pass
+
+
+class ServerUpdate(BaseModel):
+    friendly_name: str | None = None
+    url: str | None = None
+    active: bool | None = None

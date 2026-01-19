@@ -11,6 +11,7 @@ from backend.models import (
     Conversation,
     ConversationWithMessages,
     Message,
+    Server,
     UserSettings,
 )
 
@@ -192,7 +193,7 @@ async def get_user_settings(user_id: int) -> UserSettings:
     """Get user settings, creating defaults if not exists."""
     async with get_db() as db:
         cursor = await db.execute(
-            """SELECT temperature, top_k, top_p, repeat_penalty, max_tokens, system_prompt
+            """SELECT temperature, top_k, top_p, repeat_penalty, max_tokens, system_prompt, model
                FROM user_settings
                WHERE user_id = ?""",
             (user_id,)
@@ -206,10 +207,10 @@ async def get_user_settings(user_id: int) -> UserSettings:
         defaults = settings.defaults
         await db.execute(
             """INSERT INTO user_settings
-               (user_id, temperature, top_k, top_p, repeat_penalty, max_tokens, system_prompt)
-               VALUES (?, ?, ?, ?, ?, ?, ?)""",
+               (user_id, temperature, top_k, top_p, repeat_penalty, max_tokens, system_prompt, model)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
             (user_id, defaults.temperature, defaults.top_k, defaults.top_p,
-             defaults.repeat_penalty, defaults.max_tokens, defaults.system_prompt)
+             defaults.repeat_penalty, defaults.max_tokens, defaults.system_prompt, defaults.model)
         )
         await db.commit()
 
@@ -219,7 +220,8 @@ async def get_user_settings(user_id: int) -> UserSettings:
             top_p=defaults.top_p,
             repeat_penalty=defaults.repeat_penalty,
             max_tokens=defaults.max_tokens,
-            system_prompt=defaults.system_prompt
+            system_prompt=defaults.system_prompt,
+            model=defaults.model
         )
 
 
@@ -246,3 +248,92 @@ async def update_user_settings(user_id: int, updates: dict[str, Any]) -> UserSet
             await db.commit()
 
         return await get_user_settings(user_id)
+
+
+# Server operations (site-wide)
+async def list_servers(active_only: bool = False) -> list[Server]:
+    """List all servers, optionally filtering by active status."""
+    async with get_db() as db:
+        if active_only:
+            cursor = await db.execute(
+                """SELECT id, friendly_name, url, active, created_at
+                   FROM servers WHERE active = 1
+                   ORDER BY friendly_name ASC"""
+            )
+        else:
+            cursor = await db.execute(
+                """SELECT id, friendly_name, url, active, created_at
+                   FROM servers
+                   ORDER BY friendly_name ASC"""
+            )
+        rows = await cursor.fetchall()
+        return [Server(**dict(row)) for row in rows]
+
+
+async def get_server(server_id: int) -> Server | None:
+    """Get a server by ID."""
+    async with get_db() as db:
+        cursor = await db.execute(
+            """SELECT id, friendly_name, url, active, created_at
+               FROM servers WHERE id = ?""",
+            (server_id,)
+        )
+        row = await cursor.fetchone()
+        return Server(**dict(row)) if row else None
+
+
+async def create_server(friendly_name: str, url: str, active: bool = True) -> Server:
+    """Create a new server."""
+    async with get_db() as db:
+        from datetime import datetime
+        now = datetime.utcnow()
+        cursor = await db.execute(
+            """INSERT INTO servers (friendly_name, url, active, created_at)
+               VALUES (?, ?, ?, ?)""",
+            (friendly_name, url, 1 if active else 0, now)
+        )
+        await db.commit()
+        return Server(
+            id=cursor.lastrowid,
+            friendly_name=friendly_name,
+            url=url,
+            active=active,
+            created_at=now
+        )
+
+
+async def update_server(server_id: int, updates: dict[str, Any]) -> Server | None:
+    """Update a server's properties."""
+    async with get_db() as db:
+        set_clauses = []
+        values = []
+        for key, value in updates.items():
+            if value is not None:
+                if key == "active":
+                    set_clauses.append(f"{key} = ?")
+                    values.append(1 if value else 0)
+                else:
+                    set_clauses.append(f"{key} = ?")
+                    values.append(value)
+
+        if not set_clauses:
+            return await get_server(server_id)
+
+        values.append(server_id)
+        await db.execute(
+            f"UPDATE servers SET {', '.join(set_clauses)} WHERE id = ?",
+            values
+        )
+        await db.commit()
+        return await get_server(server_id)
+
+
+async def delete_server(server_id: int) -> bool:
+    """Delete a server."""
+    async with get_db() as db:
+        cursor = await db.execute(
+            "DELETE FROM servers WHERE id = ?",
+            (server_id,)
+        )
+        await db.commit()
+        return cursor.rowcount > 0

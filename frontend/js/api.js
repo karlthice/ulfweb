@@ -97,5 +97,27 @@ const api = {
             throw new Error('Failed to update settings');
         }
         return response.json();
+    },
+
+    /**
+     * Get available models from llama.cpp
+     */
+    async getModels() {
+        const response = await fetch(`${API_BASE}/models`);
+        if (!response.ok) {
+            throw new Error('Failed to fetch models');
+        }
+        return response.json();
+    },
+
+    /**
+     * Get active servers for chat dropdown
+     */
+    async getActiveServers() {
+        const response = await fetch(`${API_BASE}/admin/servers/active`);
+        if (!response.ok) {
+            throw new Error('Failed to fetch servers');
+        }
+        return response.json();
     }
 };

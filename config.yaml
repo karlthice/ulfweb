@@ -5,8 +5,8 @@ server:
 llama:
   url: "http://localhost:8081"
 
-translategemma:
-  url: "http://localhost:8082"
+tilde:
+  url: "http://localhost:8081"
 
 database:
   path: "data/ulfweb.db"
@@ -18,3 +18,4 @@ defaults:
   repeat_penalty: 1.1
   max_tokens: 2048
   system_prompt: "You are a helpful assistant."
+  model: ""
