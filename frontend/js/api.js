@@ -119,5 +119,62 @@ const api = {
             throw new Error('Failed to fetch servers');
         }
         return response.json();
+    },
+
+    // Document/Collection API methods
+    /**
+     * List all collections
+     */
+    async listCollections() {
+        const response = await fetch(`${API_BASE}/documents/collections`);
+        if (!response.ok) {
+            throw new Error('Failed to fetch collections');
+        }
+        return response.json();
+    },
+
+    /**
+     * Create a new collection
+     */
+    async createCollection(name, description = '') {
+        const response = await fetch(`${API_BASE}/documents/collections`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ name, description })
+        });
+        if (!response.ok) {
+            const error = await response.json();
+            throw new Error(error.detail || 'Failed to create collection');
+        }
+        return response.json();
+    },
+
+    /**
+     * Update a collection
+     */
+    async updateCollection(id, updates) {
+        const response = await fetch(`${API_BASE}/documents/collections/${id}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(updates)
+        });
+        if (!response.ok) {
+            throw new Error('Failed to update collection');
+        }
+        return response.json();
+    },
+
+    /**
+     * Delete a collection
+     */
+    async deleteCollection(id) {
+        const response = await fetch(`${API_BASE}/documents/collections/${id}`, {
+            method: 'DELETE'
+        });
+        if (!response.ok) {
+            const error = await response.json();
+            throw new Error(error.detail || 'Failed to delete collection');
+        }
+        return true;
     }
 };

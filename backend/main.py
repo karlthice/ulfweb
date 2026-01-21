@@ -9,7 +9,7 @@ from fastapi.responses import FileResponse
 
 from backend.config import settings
 from backend.database import init_database
-from backend.routers import admin, chat, conversations, models, settings as settings_router, translate
+from backend.routers import admin, chat, conversations, documents, models, settings as settings_router, translate
 
 
 @asynccontextmanager
@@ -34,6 +34,7 @@ app.include_router(chat.router, prefix="/api/v1")
 app.include_router(models.router, prefix="/api/v1")
 app.include_router(translate.router, prefix="/api/v1")
 app.include_router(admin.router, prefix="/api/v1")
+app.include_router(documents.router, prefix="/api/v1")
 
 # Serve static files
 frontend_path = Path(__file__).parent.parent / "frontend"

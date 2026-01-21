@@ -20,6 +20,7 @@
                 <div class="mode-tabs">
                     <button class="mode-tab active" id="chat-tab">Chat</button>
                     <button class="mode-tab" id="translate-tab">Translate</button>
+                    <button class="mode-tab" id="documents-tab">Documents</button>
                 </div>
                 <button class="new-chat-btn" id="new-chat-btn">
                     <span class="icon">+</span>
@@ -121,6 +122,78 @@
                 </button>
             </div>
         </main>
+
+        <!-- Documents area -->
+        <main class="document-area panel hidden" id="documents-panel">
+            <div class="document-header">
+                <h2>Document Search</h2>
+            </div>
+            <div class="document-content">
+                <div class="collection-selector">
+                    <label for="collection-select">Collection:</label>
+                    <select id="collection-select">
+                        <option value="">Loading...</option>
+                    </select>
+                    <button class="upload-btn" id="upload-btn" title="Upload PDF">
+                        <span class="icon">&#128206;</span>
+                        Upload PDF
+                    </button>
+                </div>
+                <div class="documents-list-container">
+                    <button class="documents-toggle" id="documents-toggle">
+                        <span class="icon">&#9660;</span>
+                        Documents (<span id="doc-count">0</span>)
+                    </button>
+                    <div class="documents-list hidden" id="documents-list">
+                        <!-- Documents will be listed here -->
+                    </div>
+                </div>
+                <div class="query-section">
+                    <textarea id="query-input" placeholder="Ask a question about the documents..."></textarea>
+                    <button class="search-btn" id="search-btn">
+                        <span class="icon">&#128269;</span>
+                        Search
+                    </button>
+                    <button class="stop-btn hidden" id="query-stop-btn">
+                        <span class="icon">&#9632;</span>
+                    </button>
+                </div>
+                <div class="query-results" id="query-results">
+                    <div class="empty-state">
+                        <p>Select a collection and ask a question to search documents</p>
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <!-- Upload Modal -->
+    <div class="modal hidden" id="upload-modal">
+        <div class="modal-overlay" id="upload-modal-overlay"></div>
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>Upload PDF</h2>
+                <button class="close-btn" id="close-upload-modal">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="upload-dropzone" id="upload-dropzone">
+                    <div class="dropzone-content">
+                        <span class="dropzone-icon">&#128196;</span>
+                        <p>Drag and drop a PDF file here</p>
+                        <p class="dropzone-or">or</p>
+                        <button class="browse-btn" id="browse-btn">Browse Files</button>
+                    </div>
+                    <input type="file" id="upload-file-input" accept=".pdf" class="hidden">
+                </div>
+                <div class="upload-progress hidden" id="upload-progress">
+                    <div class="progress-filename" id="progress-filename"></div>
+                    <div class="progress-bar">
+                        <div class="progress-fill" id="progress-fill"></div>
+                    </div>
+                    <div class="progress-status" id="progress-status">Uploading...</div>
+                </div>
+            </div>
+        </div>
     </div>
 
     <!-- Settings Modal -->
@@ -184,6 +257,7 @@
     <script src="/js/chat.js"></script>
     <script src="/js/settings.js"></script>
     <script src="/js/translate.js"></script>
+    <script src="/js/documents.js"></script>
     <script src="/js/app.js"></script>
 </body>
 </html>

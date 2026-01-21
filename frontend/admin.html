@@ -33,6 +33,52 @@
                     <!-- Servers will be loaded here -->
                 </div>
             </section>
+
+            <section class="admin-section">
+                <div class="section-header">
+                    <h2>Document Settings</h2>
+                </div>
+                <p class="section-description">Configure document settings.</p>
+
+                <div class="settings-form">
+                    <div class="setting-group">
+                        <label for="document-ai-query-server">Document AI Query</label>
+                        <select id="document-ai-query-server">
+                            <option value="">-- Select a server --</option>
+                        </select>
+                        <p class="setting-hint">The AI server used when users query documents.</p>
+                    </div>
+                    <div class="setting-group">
+                        <label for="document-ai-extraction-server">Document AI Extraction</label>
+                        <select id="document-ai-extraction-server">
+                            <option value="">-- Select a server --</option>
+                        </select>
+                        <p class="setting-hint">The AI server used for entity extraction during document processing.</p>
+                    </div>
+                    <div class="setting-group">
+                        <label for="document-ai-understanding-server">Document AI Understanding</label>
+                        <select id="document-ai-understanding-server">
+                            <option value="">-- Select a server --</option>
+                        </select>
+                        <p class="setting-hint">The AI server used for document summaries in GraphRAG.</p>
+                    </div>
+                </div>
+            </section>
+
+            <section class="admin-section">
+                <div class="section-header">
+                    <h2>Document Collections</h2>
+                    <button class="add-btn" id="add-collection-btn">
+                        <span class="icon">+</span>
+                        Add Collection
+                    </button>
+                </div>
+                <p class="section-description">Manage document collections for GraphRAG search.</p>
+
+                <div class="collections-list" id="collections-list">
+                    <!-- Collections will be loaded here -->
+                </div>
+            </section>
         </main>
     </div>
 
@@ -63,6 +109,31 @@
             </div>
             <div class="modal-footer">
                 <button class="save-btn" id="save-server-btn">Save Server</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Add/Edit Collection Modal -->
+    <div class="modal hidden" id="collection-modal">
+        <div class="modal-overlay" id="collection-modal-overlay"></div>
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2 id="collection-modal-title">Add Collection</h2>
+                <button class="close-btn" id="close-collection-modal">&times;</button>
+            </div>
+            <div class="modal-body">
+                <input type="hidden" id="collection-id">
+                <div class="setting-group">
+                    <label for="collection-name">Name</label>
+                    <input type="text" id="collection-name" placeholder="e.g., Technical Docs">
+                </div>
+                <div class="setting-group">
+                    <label for="collection-description">Description</label>
+                    <textarea id="collection-description" rows="3" placeholder="Optional description"></textarea>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="save-btn" id="save-collection-btn">Save Collection</button>
             </div>
         </div>
     </div>

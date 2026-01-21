@@ -2,13 +2,15 @@
 
 from fastapi import APIRouter, HTTPException
 
-from backend.models import Server, ServerCreate, ServerUpdate
+from backend.models import AdminSettings, AdminSettingsUpdate, Server, ServerCreate, ServerUpdate
 from backend.services.storage import (
     list_servers,
     get_server,
     create_server,
     update_server,
     delete_server,
+    get_admin_settings,
+    update_admin_settings,
 )
 
 router = APIRouter(prefix="/admin", tags=["admin"])
@@ -62,3 +64,17 @@ async def delete_server_by_id(server_id: int):
     if not await delete_server(server_id):
         raise HTTPException(status_code=404, detail="Server not found")
     return {"status": "deleted"}
+
+
+# Admin settings endpoints
+@router.get("/settings", response_model=AdminSettings)
+async def get_settings():
+    """Get admin settings."""
+    return await get_admin_settings()
+
+
+@router.put("/settings", response_model=AdminSettings)
+async def update_settings(data: AdminSettingsUpdate):
+    """Update admin settings."""
+    updates = data.model_dump(exclude_unset=True)
+    return await update_admin_settings(updates)

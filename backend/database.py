@@ -61,6 +61,99 @@ CREATE TABLE IF NOT EXISTS servers (
     active INTEGER DEFAULT 1,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
+
+-- Collections (site-wide, admin-managed)
+CREATE TABLE IF NOT EXISTS collections (
+    id INTEGER PRIMARY KEY,
+    name TEXT UNIQUE NOT NULL,
+    description TEXT DEFAULT '',
+    embedding_model TEXT DEFAULT 'paraphrase-multilingual-mpnet-base-v2',
+    is_default INTEGER DEFAULT 0,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Documents in collections
+CREATE TABLE IF NOT EXISTS documents (
+    id INTEGER PRIMARY KEY,
+    collection_id INTEGER NOT NULL,
+    filename TEXT NOT NULL,
+    original_filename TEXT NOT NULL,
+    content_hash TEXT,
+    file_size INTEGER,
+    page_count INTEGER,
+    status TEXT DEFAULT 'pending' CHECK(status IN ('pending', 'processing', 'ready', 'error')),
+    error_message TEXT,
+    uploaded_by TEXT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (collection_id) REFERENCES collections(id) ON DELETE CASCADE
+);
+
+-- Text chunks from documents
+CREATE TABLE IF NOT EXISTS document_chunks (
+    id INTEGER PRIMARY KEY,
+    document_id INTEGER NOT NULL,
+    chunk_index INTEGER NOT NULL,
+    content TEXT NOT NULL,
+    embedding BLOB,
+    FOREIGN KEY (document_id) REFERENCES documents(id) ON DELETE CASCADE
+);
+
+-- GraphRAG entities
+CREATE TABLE IF NOT EXISTS entities (
+    id INTEGER PRIMARY KEY,
+    collection_id INTEGER NOT NULL,
+    document_id INTEGER NOT NULL,
+    name TEXT NOT NULL,
+    entity_type TEXT,
+    attributes TEXT,
+    embedding BLOB,
+    FOREIGN KEY (collection_id) REFERENCES collections(id) ON DELETE CASCADE,
+    FOREIGN KEY (document_id) REFERENCES documents(id) ON DELETE CASCADE
+);
+
+-- GraphRAG relations
+CREATE TABLE IF NOT EXISTS relations (
+    id INTEGER PRIMARY KEY,
+    collection_id INTEGER NOT NULL,
+    source_entity_id INTEGER NOT NULL,
+    target_entity_id INTEGER NOT NULL,
+    relation_type TEXT NOT NULL,
+    evidence TEXT,
+    FOREIGN KEY (collection_id) REFERENCES collections(id) ON DELETE CASCADE,
+    FOREIGN KEY (source_entity_id) REFERENCES entities(id) ON DELETE CASCADE,
+    FOREIGN KEY (target_entity_id) REFERENCES entities(id) ON DELETE CASCADE
+);
+
+-- Entity-to-chunk linkage
+CREATE TABLE IF NOT EXISTS entity_chunks (
+    entity_id INTEGER NOT NULL,
+    chunk_id INTEGER NOT NULL,
+    PRIMARY KEY (entity_id, chunk_id),
+    FOREIGN KEY (entity_id) REFERENCES entities(id) ON DELETE CASCADE,
+    FOREIGN KEY (chunk_id) REFERENCES document_chunks(id) ON DELETE CASCADE
+);
+
+-- Admin settings (singleton table for site-wide settings)
+CREATE TABLE IF NOT EXISTS admin_settings (
+    id INTEGER PRIMARY KEY CHECK (id = 1),
+    document_ai_query_server_id INTEGER,
+    document_ai_extraction_server_id INTEGER,
+    document_ai_understanding_server_id INTEGER,
+    FOREIGN KEY (document_ai_query_server_id) REFERENCES servers(id) ON DELETE SET NULL,
+    FOREIGN KEY (document_ai_extraction_server_id) REFERENCES servers(id) ON DELETE SET NULL,
+    FOREIGN KEY (document_ai_understanding_server_id) REFERENCES servers(id) ON DELETE SET NULL
+);
+
+-- Ensure admin_settings row exists
+INSERT OR IGNORE INTO admin_settings (id) VALUES (1);
+
+-- Indexes for document-related queries
+CREATE INDEX IF NOT EXISTS idx_documents_collection_id ON documents(collection_id);
+CREATE INDEX IF NOT EXISTS idx_document_chunks_document_id ON document_chunks(document_id);
+CREATE INDEX IF NOT EXISTS idx_entities_collection_id ON entities(collection_id);
+CREATE INDEX IF NOT EXISTS idx_entities_document_id ON entities(document_id);
+CREATE INDEX IF NOT EXISTS idx_relations_collection_id ON relations(collection_id);
 """
 
 
@@ -79,6 +172,55 @@ async def init_database() -> None:
         if "model" not in columns:
             await db.execute(
                 "ALTER TABLE user_settings ADD COLUMN model TEXT DEFAULT ''"
+            )
+            await db.commit()
+
+        # Migration: Split document_ai_server_id into three separate fields
+        cursor = await db.execute("PRAGMA table_info(admin_settings)")
+        columns = [row[1] for row in await cursor.fetchall()]
+        if "document_ai_server_id" in columns:
+            # Get the old value to migrate
+            cursor = await db.execute(
+                "SELECT document_ai_server_id FROM admin_settings WHERE id = 1"
+            )
+            row = await cursor.fetchone()
+            old_server_id = row[0] if row else None
+
+            # Add new columns if they don't exist
+            if "document_ai_query_server_id" not in columns:
+                await db.execute(
+                    "ALTER TABLE admin_settings ADD COLUMN document_ai_query_server_id INTEGER"
+                )
+            if "document_ai_extraction_server_id" not in columns:
+                await db.execute(
+                    "ALTER TABLE admin_settings ADD COLUMN document_ai_extraction_server_id INTEGER"
+                )
+            if "document_ai_understanding_server_id" not in columns:
+                await db.execute(
+                    "ALTER TABLE admin_settings ADD COLUMN document_ai_understanding_server_id INTEGER"
+                )
+
+            # Migrate old value to all three new fields
+            if old_server_id:
+                await db.execute(
+                    """UPDATE admin_settings SET
+                       document_ai_query_server_id = ?,
+                       document_ai_extraction_server_id = ?,
+                       document_ai_understanding_server_id = ?
+                       WHERE id = 1""",
+                    (old_server_id, old_server_id, old_server_id)
+                )
+            await db.commit()
+
+        # Create Default collection if not exists
+        cursor = await db.execute(
+            "SELECT id FROM collections WHERE is_default = 1"
+        )
+        if not await cursor.fetchone():
+            await db.execute(
+                """INSERT INTO collections (name, description, is_default)
+                   VALUES (?, ?, 1)""",
+                ("Default", "Default document collection")
             )
             await db.commit()
 

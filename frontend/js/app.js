@@ -17,53 +17,52 @@ let currentMode = 'chat';
     chat.init();
     await settingsModal.init();
     translate.init();
+    documents.init();
 
     console.log('ulfweb initialized');
 })();
 
 /**
- * Setup mode tab switching between Chat and Translate
+ * Setup mode tab switching between Chat, Translate, and Documents
  */
 function setupModeTabs() {
     const chatTab = document.getElementById('chat-tab');
     const translateTab = document.getElementById('translate-tab');
+    const documentsTab = document.getElementById('documents-tab');
     const chatPanel = document.getElementById('chat-panel');
     const translatePanel = document.getElementById('translate-panel');
+    const documentsPanel = document.getElementById('documents-panel');
     const newChatBtn = document.getElementById('new-chat-btn');
     const conversationsList = document.getElementById('conversations-list');
 
-    chatTab.addEventListener('click', () => {
-        if (currentMode === 'chat') return;
-        currentMode = 'chat';
+    function setActiveTab(mode) {
+        currentMode = mode;
 
         // Update tab states
-        chatTab.classList.add('active');
-        translateTab.classList.remove('active');
+        chatTab.classList.toggle('active', mode === 'chat');
+        translateTab.classList.toggle('active', mode === 'translate');
+        documentsTab.classList.toggle('active', mode === 'documents');
 
         // Show/hide panels
-        chatPanel.classList.remove('hidden');
-        translatePanel.classList.add('hidden');
+        chatPanel.classList.toggle('hidden', mode !== 'chat');
+        translatePanel.classList.toggle('hidden', mode !== 'translate');
+        documentsPanel.classList.toggle('hidden', mode !== 'documents');
 
-        // Show chat-specific sidebar elements
-        newChatBtn.classList.remove('hidden');
-        conversationsList.classList.remove('hidden');
+        // Show/hide chat-specific sidebar elements
+        newChatBtn.classList.toggle('hidden', mode !== 'chat');
+        conversationsList.classList.toggle('hidden', mode !== 'chat');
+    }
+
+    chatTab.addEventListener('click', () => {
+        if (currentMode !== 'chat') setActiveTab('chat');
     });
 
     translateTab.addEventListener('click', () => {
-        if (currentMode === 'translate') return;
-        currentMode = 'translate';
+        if (currentMode !== 'translate') setActiveTab('translate');
+    });
 
-        // Update tab states
-        translateTab.classList.add('active');
-        chatTab.classList.remove('active');
-
-        // Show/hide panels
-        translatePanel.classList.remove('hidden');
-        chatPanel.classList.add('hidden');
-
-        // Hide chat-specific sidebar elements
-        newChatBtn.classList.add('hidden');
-        conversationsList.classList.add('hidden');
+    documentsTab.addEventListener('click', () => {
+        if (currentMode !== 'documents') setActiveTab('documents');
     });
 }
 

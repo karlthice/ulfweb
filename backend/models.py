@@ -1,6 +1,7 @@
 """Pydantic models for request/response validation."""
 
 from datetime import datetime
+from enum import Enum
 from typing import Literal
 
 from pydantic import BaseModel, Field
@@ -119,3 +120,88 @@ class ServerUpdate(BaseModel):
     friendly_name: str | None = None
     url: str | None = None
     active: bool | None = None
+
+
+# Document status enum
+class DocumentStatus(str, Enum):
+    PENDING = "pending"
+    PROCESSING = "processing"
+    READY = "ready"
+    ERROR = "error"
+
+
+# Collection models
+class CollectionBase(BaseModel):
+    name: str
+    description: str = ""
+
+
+class Collection(CollectionBase):
+    id: int
+    embedding_model: str = "paraphrase-multilingual-mpnet-base-v2"
+    is_default: bool = False
+    created_at: datetime
+    updated_at: datetime
+
+
+class CollectionWithStats(Collection):
+    document_count: int = 0
+
+
+class CollectionCreate(CollectionBase):
+    pass
+
+
+class CollectionUpdate(BaseModel):
+    name: str | None = None
+    description: str | None = None
+
+
+# Document models
+class DocumentBase(BaseModel):
+    original_filename: str
+
+
+class Document(DocumentBase):
+    id: int
+    collection_id: int
+    filename: str
+    content_hash: str | None = None
+    file_size: int | None = None
+    page_count: int | None = None
+    status: DocumentStatus = DocumentStatus.PENDING
+    error_message: str | None = None
+    uploaded_by: str | None = None
+    created_at: datetime
+
+
+class DocumentStatusResponse(BaseModel):
+    id: int
+    status: DocumentStatus
+    error_message: str | None = None
+    page_count: int | None = None
+
+
+# Document query models
+class DocumentQuery(BaseModel):
+    question: str
+    top_k: int = Field(default=5, ge=1, le=20)
+
+
+class QueryChunk(BaseModel):
+    type: Literal["content", "sources", "done", "error"]
+    content: str = ""
+    sources: list[str] = []
+
+
+# Admin settings models
+class AdminSettings(BaseModel):
+    document_ai_query_server_id: int | None = None
+    document_ai_extraction_server_id: int | None = None
+    document_ai_understanding_server_id: int | None = None
+
+
+class AdminSettingsUpdate(BaseModel):
+    document_ai_query_server_id: int | None = None
+    document_ai_extraction_server_id: int | None = None
+    document_ai_understanding_server_id: int | None = None
