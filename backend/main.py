@@ -10,6 +10,7 @@ from fastapi.responses import FileResponse
 from backend.config import settings
 from backend.database import init_database
 from backend.routers import admin, chat, conversations, documents, models, settings as settings_router, translate
+from backend.services.llama_manager import llama_manager
 
 
 @asynccontextmanager
@@ -18,6 +19,8 @@ async def lifespan(app: FastAPI):
     # Initialize database on startup
     await init_database()
     yield
+    # Cleanup llama.cpp processes on shutdown
+    llama_manager.cleanup()
 
 
 app = FastAPI(

@@ -19,3 +19,7 @@ defaults:
   max_tokens: 2048
   system_prompt: "You are a helpful assistant."
   model: ""
+
+models:
+  path: "/home/karlth/llama.cpp/models"
+  llama_server: "/home/karlth/llama.cpp/build/bin/llama-server"

@@ -8,15 +8,20 @@ const admin = {
     servers: [],
     collections: [],
     adminSettings: {},
+    availableModels: [],
+    serverStatuses: {},
+    statusPollingInterval: null,
 
     /**
      * Initialize admin page
      */
     init() {
         this.setupEventListeners();
+        this.loadModels();
         this.loadServers();
         this.loadCollections();
         this.loadAdminSettings();
+        this.startStatusPolling();
     },
 
     /**
@@ -78,6 +83,47 @@ const admin = {
     },
 
     /**
+     * Load available models from API
+     */
+    async loadModels() {
+        try {
+            const response = await fetch(`${API_BASE}/admin/models`);
+            if (!response.ok) {
+                throw new Error('Failed to fetch models');
+            }
+            const data = await response.json();
+            this.availableModels = data.models || [];
+            this.populateModelDropdown();
+        } catch (error) {
+            console.error('Failed to load models:', error);
+        }
+    },
+
+    /**
+     * Populate model dropdown with available models
+     */
+    populateModelDropdown() {
+        const select = document.getElementById('server-model-path');
+        const currentValue = select.value;
+
+        // Keep the empty option
+        select.innerHTML = '<option value="">-- Select a model --</option>';
+
+        for (const model of this.availableModels) {
+            const option = document.createElement('option');
+            option.value = model.path;
+            const sizeMB = (model.size_bytes / (1024 * 1024 * 1024)).toFixed(1);
+            option.textContent = `${model.filename} (${sizeMB} GB)`;
+            select.appendChild(option);
+        }
+
+        // Restore selection if it exists
+        if (currentValue) {
+            select.value = currentValue;
+        }
+    },
+
+    /**
      * Load servers from API
      */
     async loadServers() {
@@ -87,11 +133,129 @@ const admin = {
                 throw new Error('Failed to fetch servers');
             }
             this.servers = await response.json();
+            await this.loadServerStatuses();
             this.renderServers();
             this.populateDocumentAiDropdowns();
         } catch (error) {
             console.error('Failed to load servers:', error);
             this.showError('Failed to load servers');
+        }
+    },
+
+    /**
+     * Extract filename from a full path
+     */
+    extractFilename(path) {
+        if (!path) return null;
+        const parts = path.split('/');
+        return parts[parts.length - 1];
+    },
+
+    /**
+     * Load status for all servers
+     */
+    async loadServerStatuses() {
+        const promises = this.servers.map(async (server) => {
+            try {
+                const response = await fetch(`${API_BASE}/admin/servers/${server.id}/status`);
+                if (response.ok) {
+                    const data = await response.json();
+                    this.serverStatuses[server.id] = data.process_running;
+                }
+            } catch (error) {
+                console.error(`Failed to load status for server ${server.id}:`, error);
+                this.serverStatuses[server.id] = false;
+            }
+        });
+        await Promise.all(promises);
+    },
+
+    /**
+     * Start polling for server statuses
+     */
+    startStatusPolling() {
+        // Poll every 5 seconds
+        this.statusPollingInterval = setInterval(async () => {
+            if (this.servers.length > 0) {
+                await this.loadServerStatuses();
+                this.renderServers();
+            }
+        }, 5000);
+    },
+
+    /**
+     * Stop status polling
+     */
+    stopStatusPolling() {
+        if (this.statusPollingInterval) {
+            clearInterval(this.statusPollingInterval);
+            this.statusPollingInterval = null;
+        }
+    },
+
+    /**
+     * Start a server process
+     */
+    async startServer(id) {
+        try {
+            const response = await fetch(`${API_BASE}/admin/servers/${id}/start`, {
+                method: 'POST'
+            });
+
+            if (!response.ok) {
+                const data = await response.json();
+                throw new Error(data.detail || 'Failed to start server');
+            }
+
+            this.serverStatuses[id] = true;
+            this.renderServers();
+        } catch (error) {
+            console.error('Failed to start server:', error);
+            alert(error.message || 'Failed to start server');
+        }
+    },
+
+    /**
+     * Stop a server process
+     */
+    async stopServer(id) {
+        try {
+            const response = await fetch(`${API_BASE}/admin/servers/${id}/stop`, {
+                method: 'POST'
+            });
+
+            if (!response.ok) {
+                const data = await response.json();
+                throw new Error(data.detail || 'Failed to stop server');
+            }
+
+            this.serverStatuses[id] = false;
+            this.renderServers();
+        } catch (error) {
+            console.error('Failed to stop server:', error);
+            alert(error.message || 'Failed to stop server');
+        }
+    },
+
+    /**
+     * Restart a server process
+     */
+    async restartServer(id) {
+        try {
+            const response = await fetch(`${API_BASE}/admin/servers/${id}/restart`, {
+                method: 'POST'
+            });
+
+            if (!response.ok) {
+                const data = await response.json();
+                throw new Error(data.detail || 'Failed to restart server');
+            }
+
+            this.serverStatuses[id] = true;
+            this.renderServers();
+        } catch (error) {
+            console.error('Failed to restart server:', error);
+            alert(error.message || 'Failed to restart server');
         }
     },
 
@@ -114,19 +278,61 @@ const admin = {
             return;
         }
 
-        container.innerHTML = this.servers.map(server => `
+        container.innerHTML = this.servers.map(server => {
+            const modelName = this.extractFilename(server.model_path);
+            const modelDisplay = modelName
+                ? `<div class="server-model">${this.escapeHtml(modelName)}</div>`
+                : '';
+
+            const isRunning = this.serverStatuses[server.id] || false;
+            const hasModel = !!server.model_path;
+
+            // Process status indicator: green=running, amber=stopped (has model), gray=inactive (no model)
+            let processStatusClass = 'inactive';
+            let processStatusText = 'No model';
+            if (hasModel) {
+                if (isRunning) {
+                    processStatusClass = 'running';
+                    processStatusText = 'Running';
+                } else {
+                    processStatusClass = 'stopped';
+                    processStatusText = 'Stopped';
+                }
+            }
+
+            // Process control buttons
+            let processControls = '';
+            if (hasModel) {
+                if (isRunning) {
+                    processControls = `
+                        <button class="stop-btn" onclick="admin.stopServer(${server.id})">Stop</button>
+                        <button class="restart-btn" onclick="admin.restartServer(${server.id})">Restart</button>
+                    `;
+                } else {
+                    processControls = `
+                        <button class="start-btn" onclick="admin.startServer(${server.id})">Start</button>
+                    `;
+                }
+            }
+
+            return `
             <div class="server-item" data-id="${server.id}">
-                <div class="server-status ${server.active ? 'active' : 'inactive'}"></div>
+                <div class="server-status-indicator ${processStatusClass}" title="${processStatusText}"></div>
                 <div class="server-info">
                     <div class="server-name">${this.escapeHtml(server.friendly_name)}</div>
                     <div class="server-url">${this.escapeHtml(server.url)}</div>
+                    ${modelDisplay}
+                    <div class="server-process-status ${processStatusClass}">${processStatusText}</div>
                 </div>
                 <div class="server-actions">
+                    <div class="process-controls">
+                        ${processControls}
+                    </div>
                     <button class="edit-btn" onclick="admin.editServer(${server.id})">Edit</button>
                     <button class="delete-btn" onclick="admin.deleteServer(${server.id})">Delete</button>
                 </div>
             </div>
-        `).join('');
+        `}).join('');
     },
 
     /**
@@ -138,19 +344,31 @@ const admin = {
         const idInput = document.getElementById('server-id');
         const nameInput = document.getElementById('server-name');
         const urlInput = document.getElementById('server-url');
+        const modelPathSelect = document.getElementById('server-model-path');
+        const parallelInput = document.getElementById('server-parallel');
+        const ctxSizeInput = document.getElementById('server-ctx-size');
         const activeInput = document.getElementById('server-active');
+
+        // Refresh model dropdown
+        this.populateModelDropdown();
 
         if (server) {
             title.textContent = 'Edit Server';
             idInput.value = server.id;
             nameInput.value = server.friendly_name;
             urlInput.value = server.url;
+            modelPathSelect.value = server.model_path || '';
+            parallelInput.value = server.parallel || 1;
+            ctxSizeInput.value = server.ctx_size || 32768;
             activeInput.checked = server.active;
         } else {
             title.textContent = 'Add Server';
             idInput.value = '';
             nameInput.value = '';
             urlInput.value = '';
+            modelPathSelect.value = '';
+            parallelInput.value = '1';
+            ctxSizeInput.value = '32768';
             activeInput.checked = true;
         }
 
@@ -182,20 +400,29 @@ const admin = {
         const idInput = document.getElementById('server-id');
         const nameInput = document.getElementById('server-name');
         const urlInput = document.getElementById('server-url');
+        const modelPathInput = document.getElementById('server-model-path');
+        const parallelInput = document.getElementById('server-parallel');
+        const ctxSizeInput = document.getElementById('server-ctx-size');
         const activeInput = document.getElementById('server-active');
 
         const name = nameInput.value.trim();
         const url = urlInput.value.trim();
+        const modelPath = modelPathInput.value.trim() || null;
+        const parallel = parseInt(parallelInput.value, 10);
+        const ctxSize = parseInt(ctxSizeInput.value, 10);
         const active = activeInput.checked;
 
         if (!name || !url) {
-            alert('Please fill in all fields');
+            alert('Please fill in all required fields');
             return;
         }
 
         const data = {
             friendly_name: name,
             url: url,
+            model_path: modelPath,
+            parallel: parallel,
+            ctx_size: ctxSize,
             active: active
         };
 

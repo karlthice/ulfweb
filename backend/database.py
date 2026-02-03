@@ -59,6 +59,9 @@ CREATE TABLE IF NOT EXISTS servers (
     friendly_name TEXT NOT NULL,
     url TEXT NOT NULL,
     active INTEGER DEFAULT 1,
+    model_path TEXT,
+    parallel INTEGER DEFAULT 1,
+    ctx_size INTEGER DEFAULT 32768,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -210,6 +213,25 @@ async def init_database() -> None:
                        WHERE id = 1""",
                     (old_server_id, old_server_id, old_server_id)
                 )
+            await db.commit()
+
+        # Migration: Add model_path and parallel columns to servers if not exists
+        cursor = await db.execute("PRAGMA table_info(servers)")
+        columns = [row[1] for row in await cursor.fetchall()]
+        if "model_path" not in columns:
+            await db.execute(
+                "ALTER TABLE servers ADD COLUMN model_path TEXT"
+            )
+            await db.commit()
+        if "parallel" not in columns:
+            await db.execute(
+                "ALTER TABLE servers ADD COLUMN parallel INTEGER DEFAULT 1"
+            )
+            await db.commit()
+        if "ctx_size" not in columns:
+            await db.execute(
+                "ALTER TABLE servers ADD COLUMN ctx_size INTEGER DEFAULT 32768"
+            )
             await db.commit()
 
         # Create Default collection if not exists

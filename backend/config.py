@@ -36,12 +36,18 @@ class DefaultsConfig(BaseModel):
     model: str = ""
 
 
+class ModelsConfig(BaseModel):
+    path: str = ""
+    llama_server: str = "llama-server"
+
+
 class Settings(BaseSettings):
     server: ServerConfig = ServerConfig()
     llama: LlamaConfig = LlamaConfig()
     tilde: TildeConfig = TildeConfig()
     database: DatabaseConfig = DatabaseConfig()
     defaults: DefaultsConfig = DefaultsConfig()
+    models: ModelsConfig = ModelsConfig()
 
     class Config:
         env_prefix = "ULFWEB_"
@@ -70,6 +76,10 @@ def load_config(config_path: str | None = None) -> Settings:
         config_data.setdefault("server", {})["host"] = os.getenv("ULFWEB_SERVER_HOST")
     if os.getenv("ULFWEB_SERVER_PORT"):
         config_data.setdefault("server", {})["port"] = int(os.getenv("ULFWEB_SERVER_PORT"))
+    if os.getenv("ULFWEB_MODELS_PATH"):
+        config_data.setdefault("models", {})["path"] = os.getenv("ULFWEB_MODELS_PATH")
+    if os.getenv("ULFWEB_LLAMA_SERVER"):
+        config_data.setdefault("models", {})["llama_server"] = os.getenv("ULFWEB_LLAMA_SERVER")
 
     return Settings(**config_data)
 

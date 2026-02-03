@@ -100,6 +100,34 @@
                     <label for="server-url">URL</label>
                     <input type="text" id="server-url" placeholder="e.g., http://localhost:8081">
                 </div>
+                <div class="setting-group">
+                    <label for="server-model-path">Model</label>
+                    <select id="server-model-path">
+                        <option value="">-- Select a model --</option>
+                    </select>
+                    <p class="setting-hint">Select a GGUF model file (optional).</p>
+                </div>
+                <div class="setting-group">
+                    <label for="server-parallel">Parallel Slots</label>
+                    <select id="server-parallel">
+                        <option value="1">1</option>
+                        <option value="2">2</option>
+                        <option value="3">3</option>
+                        <option value="4">4</option>
+                    </select>
+                    <p class="setting-hint">Number of parallel inference slots.</p>
+                </div>
+                <div class="setting-group">
+                    <label for="server-ctx-size">Context Size</label>
+                    <select id="server-ctx-size">
+                        <option value="8192">8K</option>
+                        <option value="16384">16K</option>
+                        <option value="32768">32K</option>
+                        <option value="65536">64K</option>
+                        <option value="131072">128K</option>
+                    </select>
+                    <p class="setting-hint">Maximum context window size in tokens.</p>
+                </div>
                 <div class="setting-group checkbox-group">
                     <label>
                         <input type="checkbox" id="server-active" checked>
