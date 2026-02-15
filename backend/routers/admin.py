@@ -23,6 +23,8 @@ router = APIRouter(prefix="/admin", tags=["admin"])
 @router.get("/models")
 async def get_available_models():
     """List available .gguf model files from the configured models directory."""
+    import re
+
     models_path = settings.models.path
 
     if not models_path:
@@ -34,11 +36,33 @@ async def get_available_models():
 
     models = []
     min_size = 100 * 1024 * 1024  # 100 MB
+    # Pattern to match split model parts (e.g., -00002-of-00003.gguf)
+    split_part_pattern = re.compile(r'-0000[2-9]-of-\d+\.gguf$|000[1-9][0-9]-of-\d+\.gguf$')
+    # Pattern to match first part of split models (e.g., -00001-of-00003.gguf)
+    first_part_pattern = re.compile(r'-00001-of-(\d+)\.gguf$')
+
     for gguf_file in models_dir.glob("*.gguf"):
         # Exclude mmproj files (vision projectors)
         if "mmproj" in gguf_file.name.lower():
             continue
-        size = gguf_file.stat().st_size
+        # Exclude non-first parts of split models (keep only -00001-of-XXXXX)
+        if split_part_pattern.search(gguf_file.name):
+            continue
+
+        # Check if this is a split model (first part)
+        first_part_match = first_part_pattern.search(gguf_file.name)
+        if first_part_match:
+            # Calculate total size across all parts
+            num_parts = int(first_part_match.group(1))
+            size = 0
+            for i in range(1, num_parts + 1):
+                part_name = first_part_pattern.sub(f'-{i:05d}-of-{num_parts:05d}.gguf', gguf_file.name)
+                part_path = models_dir / part_name
+                if part_path.exists():
+                    size += part_path.stat().st_size
+        else:
+            size = gguf_file.stat().st_size
+
         # Only include models larger than 100 MB
         if size < min_size:
             continue

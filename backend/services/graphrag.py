@@ -377,7 +377,8 @@ Answer:"""
                         "prompt": prompt,
                         "max_tokens": 250,
                         "temperature": 0.3,
-                        "stream": True
+                        "stream": True,
+                        "stop": ["</s>", "\n\nQuestion:", "\n\nAnswer:", "---"]
                     }
                 )
                 response.raise_for_status()

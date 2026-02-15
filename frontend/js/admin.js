@@ -722,7 +722,7 @@ const admin = {
     },
 
     /**
-     * Populate Document AI dropdowns with servers
+     * Populate Document AI dropdowns with active servers only
      */
     populateDocumentAiDropdowns() {
         const dropdowns = [
@@ -731,15 +731,21 @@ const admin = {
             { id: 'document-ai-understanding-server', setting: 'document_ai_understanding_server_id' }
         ];
 
+        // Only show active servers in Document AI dropdowns
+        const activeServers = this.servers.filter(s => s.active);
+
         for (const dropdown of dropdowns) {
             const select = document.getElementById(dropdown.id);
             select.innerHTML = '<option value="">-- Select a server --</option>';
 
-            for (const server of this.servers) {
+            const currentSetting = this.adminSettings[dropdown.setting];
+
+            for (const server of activeServers) {
                 const option = document.createElement('option');
                 option.value = server.id;
                 option.textContent = server.friendly_name;
-                if (this.adminSettings[dropdown.setting] === server.id) {
+                // Compare as integers to handle any type mismatches
+                if (currentSetting != null && parseInt(currentSetting) === parseInt(server.id)) {
                     option.selected = true;
                 }
                 select.appendChild(option);

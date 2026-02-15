@@ -37,6 +37,18 @@ class LlamaManager:
         except Exception:
             return None
 
+    def _extract_base_name(self, model_path: str) -> str:
+        """Extract base model name without quantization suffix."""
+        model_name = Path(model_path).stem
+        # Handle split model names (e.g., Qwen3-Coder-Next-Q6_K-00001-of-00002)
+        model_name = re.sub(r'-\d{5}-of-\d{5}$', '', model_name)
+        # Remove quantization suffix
+        for suffix in ['-Q4_K_M', '-Q4_K_S', '-Q5_K_M', '-Q5_K_S', '-Q6_K', '-Q8_0', '-F16', '-F32']:
+            if model_name.endswith(suffix):
+                model_name = model_name[:-len(suffix)]
+                break
+        return model_name
+
     def _find_mmproj_file(self, model_path: str) -> str | None:
         """Find a matching mmproj file for vision models.
 
@@ -48,15 +60,7 @@ class LlamaManager:
             return None
 
         model_dir = Path(model_path).parent
-        model_name = Path(model_path).stem
-
-        # Extract base model name (without quantization suffix like Q4_K_M)
-        # Common patterns: ModelName-Size-Q4_K_M, ModelName-Q4_K_M
-        base_name = model_name
-        for suffix in ['-Q4_K_M', '-Q4_K_S', '-Q5_K_M', '-Q5_K_S', '-Q6_K', '-Q8_0', '-F16', '-F32']:
-            if base_name.endswith(suffix):
-                base_name = base_name[:-len(suffix)]
-                break
+        base_name = self._extract_base_name(model_path)
 
         # Look for mmproj files that match this specific model
         for mmproj in model_dir.glob("*mmproj*.gguf"):
@@ -64,6 +68,25 @@ class LlamaManager:
             # Check if the mmproj file name contains the base model name
             if base_name.lower() in mmproj_name or mmproj_name.replace('mmproj-', '').replace('-mmproj', '') in base_name.lower():
                 return str(mmproj)
+
+        return None
+
+    def _find_chat_template_file(self, model_path: str) -> str | None:
+        """Find a custom chat template file for a model.
+
+        Looks for files named <model-base-name>-template.jinja in the model directory.
+        """
+        if not model_path:
+            return None
+
+        model_dir = Path(model_path).parent
+        base_name = self._extract_base_name(model_path)
+
+        # Look for template files that match this model
+        for template in model_dir.glob("*-template.jinja"):
+            template_name = template.stem.lower().replace('-template', '')
+            if base_name.lower() in template_name or template_name in base_name.lower():
+                return str(template)
 
         return None
 
@@ -91,9 +114,16 @@ class LlamaManager:
         cmd = [
             self._llama_server_path,
             "-m", model_path,
+            "--host", "0.0.0.0",
             "--port", str(port),
             "-np", str(parallel),
             "-c", str(ctx_size),
+            "--jinja",           # Enable Jinja template processing (required for tool calling)
+            "--flash-attn", "on", # Flash attention for better performance
+            "--min-p", "0.01",   # Min-p sampling (Unsloth recommended, llama.cpp default 0.05 is wrong)
+            "--temp", "1.0",     # Temperature (Unsloth recommended for Qwen3)
+            "--top-p", "0.95",   # Top-p sampling
+            "--top-k", "40",     # Top-k sampling
         ]
 
         # Check for vision model (mmproj file)
@@ -101,6 +131,12 @@ class LlamaManager:
         if mmproj:
             cmd.extend(["--mmproj", mmproj])
             logger.info(f"Server {server_id}: Detected vision model, using mmproj: {mmproj}")
+
+        # Check for custom chat template
+        chat_template = self._find_chat_template_file(model_path)
+        if chat_template:
+            cmd.extend(["--chat-template-file", chat_template])
+            logger.info(f"Server {server_id}: Using custom chat template: {chat_template}")
 
         logger.info(f"Server {server_id}: Starting llama-server with command: {' '.join(cmd)}")
 
