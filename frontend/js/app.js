@@ -13,6 +13,7 @@ let currentMode = 'chat';
     setupModeTabs();
 
     // Initialize components
+    tts.init();
     await conversations.init();
     chat.init();
     await settingsModal.init();

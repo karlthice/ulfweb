@@ -41,6 +41,21 @@ class ModelsConfig(BaseModel):
     llama_server: str = "llama-server"
 
 
+class TTSConfig(BaseModel):
+    voices_path: str = "data/voices"
+    voice_mapping: dict[str, str] = {
+        "is": "is_IS-salka-medium",
+        "en": "en_US-lessac-medium",
+        "no": "no_NO-talesyntese-medium",
+        "sv": "sv_SE-nst-medium",
+        "da": "da_DK-talesyntese-medium",
+        "de": "de_DE-thorsten-high",
+        "fr": "fr_FR-siwis-medium",
+        "it": "it_IT-riccardo-x_low",
+        "es": "es_ES-sharvard-medium",
+    }
+
+
 class Settings(BaseSettings):
     server: ServerConfig = ServerConfig()
     llama: LlamaConfig = LlamaConfig()
@@ -48,6 +63,7 @@ class Settings(BaseSettings):
     database: DatabaseConfig = DatabaseConfig()
     defaults: DefaultsConfig = DefaultsConfig()
     models: ModelsConfig = ModelsConfig()
+    tts: TTSConfig = TTSConfig()
 
     class Config:
         env_prefix = "ULFWEB_"

@@ -189,6 +189,23 @@ const translate = (function() {
                 performTranslation();
             }
         });
+
+        // Speak translation button
+        const speakBtn = document.getElementById('translate-speak-btn');
+        if (speakBtn) {
+            speakBtn.addEventListener('click', (e) => {
+                e.preventDefault();
+                const text = targetTextArea.value.trim();
+                if (text) {
+                    const targetLang = targetLanguageSelect.value;
+                    if (speakBtn.classList.contains('speaking')) {
+                        tts.stop();
+                    } else {
+                        tts.speak(text, targetLang, speakBtn);
+                    }
+                }
+            });
+        }
     }
 
     /**

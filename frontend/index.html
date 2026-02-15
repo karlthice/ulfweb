@@ -110,7 +110,12 @@
                     <span class="icon">&#8596;</span>
                 </button>
                 <div class="translate-section">
-                    <select id="target-language"></select>
+                    <div class="translate-section-header">
+                        <select id="target-language"></select>
+                        <button class="speak-btn" id="translate-speak-btn" title="Speak translation">
+                            <span class="speak-icon">&#128266;</span>
+                        </button>
+                    </div>
                     <textarea id="target-text" placeholder="Translation will appear here..." readonly></textarea>
                 </div>
             </div>
@@ -253,6 +258,7 @@
     </script>
     <script src="/js/api.js"></script>
     <script src="/js/sse.js"></script>
+    <script src="/js/tts.js"></script>
     <script src="/js/conversations.js"></script>
     <script src="/js/chat.js"></script>
     <script src="/js/settings.js"></script>

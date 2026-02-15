@@ -479,6 +479,16 @@ const chat = {
 
         innerDiv.appendChild(roleDiv);
         innerDiv.appendChild(contentDiv);
+
+        // Add speak button for assistant messages
+        if (role === 'assistant' && content) {
+            const actionsDiv = document.createElement('div');
+            actionsDiv.className = 'message-actions';
+            const speakBtn = tts.createSpeakButton(() => tts.htmlToText(contentDiv.innerHTML));
+            actionsDiv.appendChild(speakBtn);
+            innerDiv.appendChild(actionsDiv);
+        }
+
         msgDiv.appendChild(innerDiv);
 
         container.appendChild(msgDiv);
@@ -572,6 +582,16 @@ const chat = {
                     // Render final markdown
                     contentDiv.innerHTML = this.renderMarkdown(assistantContent);
                     this.messages.push({ role: 'assistant', content: assistantContent });
+
+                    // Add speak button after streaming completes
+                    const innerDiv = assistantDiv.querySelector('.message-inner');
+                    if (innerDiv && !innerDiv.querySelector('.message-actions')) {
+                        const actionsDiv = document.createElement('div');
+                        actionsDiv.className = 'message-actions';
+                        const speakBtn = tts.createSpeakButton(() => tts.htmlToText(contentDiv.innerHTML));
+                        actionsDiv.appendChild(speakBtn);
+                        innerDiv.appendChild(actionsDiv);
+                    }
                 }
 
                 // Show final tokens/sec

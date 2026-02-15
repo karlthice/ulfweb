@@ -476,6 +476,18 @@ const documents = (function() {
                 `;
             }
 
+            // Add speak button after query completes
+            if (fullAnswer) {
+                const resultAnswer = queryResults.querySelector('.result-answer');
+                if (resultAnswer) {
+                    const actionsDiv = document.createElement('div');
+                    actionsDiv.className = 'result-actions';
+                    const speakBtn = tts.createSpeakButton(() => tts.htmlToText(resultAnswer.innerHTML));
+                    actionsDiv.appendChild(speakBtn);
+                    resultAnswer.after(actionsDiv);
+                }
+            }
+
         } catch (error) {
             if (error.name === 'AbortError') {
                 // Query was intentionally stopped
