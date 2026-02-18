@@ -271,10 +271,6 @@ html, body {
     white-space: pre-wrap;
 }
 
-.message.streaming .message-content {
-    white-space: pre-wrap;
-}
-
 .message.user {
     background: var(--bg-user-msg);
 }

@@ -557,6 +557,7 @@ const chat = {
         let tokenCount = 0;
         const startTime = performance.now();
         const tokensCounter = document.getElementById('tokens-counter');
+        let renderPending = false;
 
         await sseHandler.streamMessage(
             this.conversationId,
@@ -564,8 +565,14 @@ const chat = {
             // onChunk
             (chunk) => {
                 assistantContent += chunk;
-                contentDiv.textContent = assistantContent;
-                this.scrollToBottom();
+                if (!renderPending) {
+                    renderPending = true;
+                    requestAnimationFrame(() => {
+                        renderPending = false;
+                        contentDiv.innerHTML = this.renderMarkdown(assistantContent);
+                        this.scrollToBottom();
+                    });
+                }
 
                 // Update tokens/sec counter (approximate tokens by splitting on whitespace/punctuation)
                 tokenCount++;
@@ -577,6 +584,7 @@ const chat = {
             },
             // onDone
             (messageId) => {
+                renderPending = false;
                 assistantDiv.classList.remove('streaming');
                 if (assistantContent) {
                     // Render final markdown
