@@ -568,9 +568,11 @@ async def bulk_insert_chunks(document_id: int, chunks: list[dict]) -> None:
     async with get_db() as db:
         for idx, chunk in enumerate(chunks):
             await db.execute(
-                """INSERT INTO document_chunks (document_id, chunk_index, content, embedding)
-                   VALUES (?, ?, ?, ?)""",
-                (document_id, idx, chunk["content"], chunk.get("embedding"))
+                """INSERT INTO document_chunks
+                   (document_id, chunk_index, content, embedding, page_number, context_prefix)
+                   VALUES (?, ?, ?, ?, ?, ?)""",
+                (document_id, idx, chunk["content"], chunk.get("embedding"),
+                 chunk.get("page_number"), chunk.get("context_prefix"))
             )
         await db.commit()
 
@@ -579,7 +581,7 @@ async def get_chunks_by_document(document_id: int) -> list[dict]:
     """Get all chunks for a document."""
     async with get_db() as db:
         cursor = await db.execute(
-            """SELECT id, document_id, chunk_index, content, embedding
+            """SELECT id, document_id, chunk_index, content, embedding, page_number
                FROM document_chunks
                WHERE document_id = ?
                ORDER BY chunk_index ASC""",
@@ -593,7 +595,8 @@ async def get_chunks_by_collection(collection_id: int) -> list[dict]:
     """Get all chunks for a collection."""
     async with get_db() as db:
         cursor = await db.execute(
-            """SELECT c.id, c.document_id, c.chunk_index, c.content, c.embedding, d.original_filename
+            """SELECT c.id, c.document_id, c.chunk_index, c.content, c.embedding,
+                      c.page_number, d.original_filename
                FROM document_chunks c
                JOIN documents d ON d.id = c.document_id
                WHERE d.collection_id = ? AND d.status = 'ready'
@@ -602,6 +605,33 @@ async def get_chunks_by_collection(collection_id: int) -> list[dict]:
         )
         rows = await cursor.fetchall()
         return [dict(row) for row in rows]
+
+
+async def search_chunks_fts(collection_id: int, query: str, limit: int = 50) -> list[tuple[int, float]]:
+    """Search chunks using FTS5 BM25 ranking. Returns [(chunk_id, score), ...]."""
+    import re as _re
+    async with get_db() as db:
+        clean_query = _re.sub(r'[^\w\s]', ' ', query).strip()
+        words = clean_query.split()
+        if not words:
+            return []
+        fts_query = " OR ".join(f'"{w}"' for w in words if w)
+        try:
+            cursor = await db.execute(
+                """SELECT dc.id, bm25(chunks_fts) as score
+                   FROM chunks_fts
+                   JOIN document_chunks dc ON dc.id = chunks_fts.rowid
+                   JOIN documents d ON d.id = dc.document_id
+                   WHERE chunks_fts MATCH ? AND d.collection_id = ? AND d.status = 'ready'
+                   ORDER BY score
+                   LIMIT ?""",
+                (fts_query, collection_id, limit)
+            )
+            rows = await cursor.fetchall()
+            # bm25() returns negative scores (lower = better), negate for ranking
+            return [(row["id"], -row["score"]) for row in rows]
+        except Exception:
+            return []
 
 
 # Entity operations

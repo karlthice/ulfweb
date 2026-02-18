@@ -99,6 +99,8 @@ CREATE TABLE IF NOT EXISTS document_chunks (
     chunk_index INTEGER NOT NULL,
     content TEXT NOT NULL,
     embedding BLOB,
+    page_number INTEGER,
+    context_prefix TEXT,
     FOREIGN KEY (document_id) REFERENCES documents(id) ON DELETE CASCADE
 );
 
@@ -136,6 +138,18 @@ CREATE TABLE IF NOT EXISTS entity_chunks (
     FOREIGN KEY (entity_id) REFERENCES entities(id) ON DELETE CASCADE,
     FOREIGN KEY (chunk_id) REFERENCES document_chunks(id) ON DELETE CASCADE
 );
+
+-- Full-text search index for chunks (BM25 hybrid search)
+CREATE VIRTUAL TABLE IF NOT EXISTS chunks_fts USING fts5(content);
+
+-- Auto-sync FTS index with document_chunks
+CREATE TRIGGER IF NOT EXISTS chunks_fts_insert AFTER INSERT ON document_chunks BEGIN
+    INSERT INTO chunks_fts(rowid, content) VALUES (new.id, new.content);
+END;
+
+CREATE TRIGGER IF NOT EXISTS chunks_fts_delete AFTER DELETE ON document_chunks BEGIN
+    INSERT INTO chunks_fts(chunks_fts, rowid, content) VALUES ('delete', old.id, old.content);
+END;
 
 -- Admin settings (singleton table for site-wide settings)
 CREATE TABLE IF NOT EXISTS admin_settings (
@@ -231,6 +245,32 @@ async def init_database() -> None:
         if "ctx_size" not in columns:
             await db.execute(
                 "ALTER TABLE servers ADD COLUMN ctx_size INTEGER DEFAULT 32768"
+            )
+            await db.commit()
+
+        # Migration: Add page_number and context_prefix to document_chunks
+        cursor = await db.execute("PRAGMA table_info(document_chunks)")
+        dc_columns = [row[1] for row in await cursor.fetchall()]
+        if "page_number" not in dc_columns:
+            await db.execute(
+                "ALTER TABLE document_chunks ADD COLUMN page_number INTEGER"
+            )
+            await db.commit()
+        if "context_prefix" not in dc_columns:
+            await db.execute(
+                "ALTER TABLE document_chunks ADD COLUMN context_prefix TEXT"
+            )
+            await db.commit()
+
+        # Migration: Populate FTS index for existing chunks
+        cursor = await db.execute("SELECT COUNT(*) FROM document_chunks")
+        chunk_count = (await cursor.fetchone())[0]
+        cursor = await db.execute("SELECT COUNT(*) FROM chunks_fts")
+        fts_count = (await cursor.fetchone())[0]
+        if chunk_count > 0 and fts_count == 0:
+            await db.execute(
+                "INSERT INTO chunks_fts(rowid, content) "
+                "SELECT id, content FROM document_chunks"
             )
             await db.commit()
 
