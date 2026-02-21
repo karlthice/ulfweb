@@ -80,6 +80,11 @@ const admin = {
         document.getElementById('document-ai-understanding-server').addEventListener('change', (e) => {
             this.saveDocumentAiSetting('document_ai_understanding_server_id', e.target.value);
         });
+
+        // Skip contextual retrieval checkbox
+        document.getElementById('skip-contextual-retrieval').addEventListener('change', (e) => {
+            this.saveDocumentAiSetting('skip_contextual_retrieval', e.target.checked);
+        });
     },
 
     /**
@@ -751,18 +756,28 @@ const admin = {
                 select.appendChild(option);
             }
         }
+
+        // Set skip contextual retrieval checkbox
+        const skipCheckbox = document.getElementById('skip-contextual-retrieval');
+        if (skipCheckbox) {
+            skipCheckbox.checked = !!this.adminSettings.skip_contextual_retrieval;
+        }
     },
 
     /**
      * Save Document AI server setting
      */
-    async saveDocumentAiSetting(settingKey, serverId) {
+    async saveDocumentAiSetting(settingKey, value) {
         try {
+            // Server IDs are strings from dropdowns — parse to int or null
+            // Booleans (e.g. skip_contextual_retrieval) pass through as-is
+            const parsed = typeof value === 'boolean' ? value
+                : value ? parseInt(value) : null;
             const response = await fetch(`${API_BASE}/admin/settings`, {
                 method: 'PUT',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
-                    [settingKey]: serverId ? parseInt(serverId) : null
+                    [settingKey]: parsed
                 })
             });
 

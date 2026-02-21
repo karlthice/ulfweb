@@ -6,9 +6,12 @@ Implements a full RAG pipeline: PDF → chunking → embedding → entity extrac
 Adapted from /home/karlth/src/ragtest/graphrag_auto.py
 """
 
+import asyncio
 import hashlib
 import json
+import logging
 import re
+import time
 from pathlib import Path
 from typing import AsyncGenerator
 
@@ -19,6 +22,8 @@ from sentence_transformers import SentenceTransformer
 
 from backend.config import settings
 from backend.services import storage
+
+logger = logging.getLogger(__name__)
 
 
 class GraphRAGService:
@@ -57,6 +62,30 @@ class GraphRAGService:
                 return server.url
         return settings.llama.url
 
+    async def _get_server_parallel_slots(self, role: str) -> int:
+        """Get the configured parallel slots for a server role.
+
+        Args:
+            role: One of 'extraction', 'understanding', 'query'.
+
+        Returns:
+            Number of parallel slots (defaults to 1 if no server configured).
+        """
+        admin_settings = await storage.get_admin_settings()
+        server_id = None
+        if role == "extraction":
+            server_id = admin_settings.document_ai_extraction_server_id
+        elif role == "understanding":
+            server_id = admin_settings.document_ai_understanding_server_id
+        elif role == "query":
+            server_id = admin_settings.document_ai_query_server_id
+
+        if server_id:
+            server = await storage.get_server(server_id)
+            if server:
+                return server.parallel
+        return 1
+
     @classmethod
     def get_encoder(cls, model_name: str = "paraphrase-multilingual-mpnet-base-v2") -> SentenceTransformer:
         """Lazy-load and cache the encoder model."""
@@ -69,7 +98,7 @@ class GraphRAGService:
         """Lazy-load and cache the cross-encoder model for reranking."""
         if cls._cross_encoder is None:
             from sentence_transformers import CrossEncoder
-            cls._cross_encoder = CrossEncoder("cross-encoder/ms-marco-MiniLM-L-12-v2")
+            cls._cross_encoder = CrossEncoder("cross-encoder/mmarco-mMiniLMv2-L12-H384-v1")
         return cls._cross_encoder
 
     def get_content_hash(self, content: bytes) -> str:
@@ -193,7 +222,8 @@ class GraphRAGService:
                 print(f"LLM Error: {e}")
                 return ""
 
-    async def extract_entities_from_text(self, doc_name: str, text: str) -> tuple[list[dict], list[dict]]:
+    async def extract_entities_from_text(self, doc_name: str, text: str,
+                                         llm_url: str | None = None) -> tuple[list[dict], list[dict]]:
         """Extract entities and relations from a text segment using LLM.
 
         No longer truncates input — callers should pass appropriately sized text
@@ -235,7 +265,8 @@ JSON:
 ```json
 """
 
-        response = await self.call_llm(prompt, max_tokens=2000, temperature=0.1)
+        response = await self.call_llm(prompt, max_tokens=2000, temperature=0.1,
+                                       llm_url=llm_url)
 
         entities = []
         relations = []
@@ -281,20 +312,52 @@ JSON:
         return entities, relations
 
     async def extract_entities_from_chunks(self, doc_name: str, chunks: list[dict]) -> tuple[list[dict], list[dict]]:
-        """Extract entities and relations by processing chunks in batches.
+        """Extract entities and relations by processing chunks in parallel batches.
 
-        Processes chunks in groups of 3 to stay within LLM context limits,
-        then deduplicates entities across batches. This replaces the old
-        approach of truncating the full document to 4000 characters.
+        Processes chunks in groups of 5, running batches in parallel up to
+        the configured server parallel slot limit. Deduplicates entities
+        across batches.
         """
-        all_entities = []
-        all_relations = []
-        batch_size = 3
-
+        batch_size = 5
+        batches = []
         for i in range(0, len(chunks), batch_size):
             batch = chunks[i:i + batch_size]
             batch_text = "\n\n---\n\n".join(c["content"] for c in batch)
-            entities, relations = await self.extract_entities_from_text(doc_name, batch_text)
+            batches.append(batch_text)
+
+        if not batches:
+            return [], []
+
+        # Resolve URL and parallelism once before the gather
+        extraction_url = await self.get_extraction_llm_url()
+        max_parallel = await self._get_server_parallel_slots("extraction")
+        semaphore = asyncio.Semaphore(max_parallel)
+        total = len(batches)
+        completed = [0]
+        start_time = time.monotonic()
+
+        async def process_batch(batch_idx: int, text: str):
+            async with semaphore:
+                entities, relations = await self.extract_entities_from_text(
+                    doc_name, text, llm_url=extraction_url
+                )
+                completed[0] += 1
+                elapsed = time.monotonic() - start_time
+                rate = completed[0] / elapsed if elapsed > 0 else 0
+                remaining = (total - completed[0]) / rate if rate > 0 else 0
+                logger.info(
+                    "Entity extraction: batch %d/%d done (%.1f batches/min, ETA %.0fs)",
+                    completed[0], total, rate * 60, remaining
+                )
+                return entities, relations
+
+        results = await asyncio.gather(*(
+            process_batch(i, text) for i, text in enumerate(batches)
+        ))
+
+        all_entities = []
+        all_relations = []
+        for entities, relations in results:
             all_entities.extend(entities)
             all_relations.extend(relations)
 
@@ -322,14 +385,16 @@ JSON:
         return unique_entities, unique_relations
 
     async def generate_chunk_context(self, doc_name: str, doc_summary: str,
-                                     chunk_content: str) -> str:
+                                     chunk_content: str,
+                                     llm_url: str | None = None) -> str:
         """Generate a contextual prefix for a chunk using the understanding LLM.
 
         Implements Anthropic's Contextual Retrieval technique: prepends a short
         context summary to each chunk before embedding, reducing retrieval
         failures by 35-67%.
         """
-        llm_url = await self.get_understanding_llm_url()
+        if llm_url is None:
+            llm_url = await self.get_understanding_llm_url()
         prompt = f"""Document: {doc_name}
 Document summary: {doc_summary}
 
@@ -338,7 +403,7 @@ Here is a chunk from this document:
 {chunk_content[:1500]}
 ---
 
-Write a brief context sentence (under 100 tokens) that situates this chunk within the document. Include the document topic, section, and any key entities mentioned. Do not repeat the chunk content.
+Write a brief context sentence (under 100 tokens) that situates this chunk within the document. Include the document topic, section, and any key entities mentioned. Do not repeat the chunk content. Write in the SAME LANGUAGE as the chunk text.
 
 Context:"""
 
@@ -360,7 +425,7 @@ Context:"""
 
 {sample_text}
 
-Write a 2-3 sentence summary of what this document is about.
+Write a 2-3 sentence summary of what this document is about. Write in the SAME LANGUAGE as the document text.
 
 Summary:"""
 
@@ -385,31 +450,70 @@ Summary:"""
         await storage.update_document_status(document_id, "processing")
 
         try:
+            pipeline_start = time.monotonic()
             pages, page_count = await self.extract_text_from_pdf(pdf_path)
             await storage.update_document_status(document_id, "processing",
                                                  page_count=page_count)
 
             chunks = self.chunk_text(pages)
+            logger.info("Document %d: %d pages, %d chunks", document_id, page_count, len(chunks))
 
-            # Contextual retrieval: generate context prefix for each chunk
-            try:
-                doc_summary = await self.generate_document_summary(
-                    doc.original_filename, pages
-                )
-                for chunk in chunks:
-                    try:
-                        context = await self.generate_chunk_context(
-                            doc.original_filename, doc_summary, chunk["content"]
-                        )
-                        chunk["context_prefix"] = context
-                    except Exception:
-                        chunk["context_prefix"] = ""
-            except Exception:
-                # If summary generation fails, skip contextual retrieval
+            # Check if contextual retrieval should be skipped
+            admin_settings = await storage.get_admin_settings()
+            if admin_settings.skip_contextual_retrieval:
+                logger.info("Skipping contextual retrieval (disabled in admin settings)")
                 for chunk in chunks:
                     chunk["context_prefix"] = ""
+            else:
+                # Contextual retrieval: generate context prefix for each chunk in parallel
+                try:
+                    doc_summary = await self.generate_document_summary(
+                        doc.original_filename, pages
+                    )
+
+                    # Resolve URL and parallelism once before the gather
+                    understanding_url = await self.get_understanding_llm_url()
+                    max_parallel = await self._get_server_parallel_slots("understanding")
+                    semaphore = asyncio.Semaphore(max_parallel)
+                    total = len(chunks)
+                    completed = [0]
+                    start_time = time.monotonic()
+
+                    async def generate_context_for_chunk(idx: int, chunk: dict):
+                        async with semaphore:
+                            try:
+                                context = await self.generate_chunk_context(
+                                    doc.original_filename, doc_summary,
+                                    chunk["content"], llm_url=understanding_url
+                                )
+                            except Exception:
+                                context = ""
+                            completed[0] += 1
+                            elapsed = time.monotonic() - start_time
+                            rate = completed[0] / elapsed if elapsed > 0 else 0
+                            remaining = (total - completed[0]) / rate if rate > 0 else 0
+                            logger.info(
+                                "Chunk context: %d/%d done (%.1f chunks/min, ETA %.0fs)",
+                                completed[0], total, rate * 60, remaining
+                            )
+                            return idx, context
+
+                    results = await asyncio.gather(*(
+                        generate_context_for_chunk(i, chunk)
+                        for i, chunk in enumerate(chunks)
+                    ))
+
+                    for idx, context in results:
+                        chunks[idx]["context_prefix"] = context
+
+                except Exception:
+                    # If summary generation fails, skip contextual retrieval
+                    logger.warning("Document summary generation failed, skipping contextual retrieval")
+                    for chunk in chunks:
+                        chunk["context_prefix"] = ""
 
             # Embed chunks with context prefix prepended for better retrieval
+            logger.info("Document %d: embedding %d chunks", document_id, len(chunks))
             encoder = self.get_encoder(self.embedding_model)
             chunk_texts_for_embedding = [
                 f"{c.get('context_prefix', '')} {c['content']}" if c.get('context_prefix')
@@ -426,10 +530,13 @@ Summary:"""
             stored_chunks = await storage.get_chunks_by_document(document_id)
             chunk_id_map = {c["chunk_index"]: c["id"] for c in stored_chunks}
 
-            # Extract entities per-chunk-batch (replaces truncated full-document extraction)
+            # Extract entities per-chunk-batch in parallel
+            logger.info("Document %d: extracting entities from %d chunks", document_id, len(chunks))
             entities, relations = await self.extract_entities_from_chunks(
                 doc.original_filename, chunks
             )
+            logger.info("Document %d: found %d entities, %d relations",
+                        document_id, len(entities), len(relations))
 
             entity_name_to_id = {}
             if entities:
@@ -478,6 +585,8 @@ Summary:"""
                 if valid_relations:
                     await storage.bulk_insert_relations(doc.collection_id, valid_relations)
 
+            elapsed = time.monotonic() - pipeline_start
+            logger.info("Document %d: processing complete in %.1fs", document_id, elapsed)
             await storage.update_document_status(document_id, "ready",
                                                  page_count=page_count)
 
@@ -487,7 +596,7 @@ Summary:"""
             raise
 
     async def query(self, collection_id: int, question: str,
-                    top_k: int = 5) -> AsyncGenerator[dict, None]:
+                    top_k: int = 10) -> AsyncGenerator[dict, None]:
         """Query a collection using hybrid search with RRF and cross-encoder reranking.
 
         Pipeline:
@@ -585,6 +694,12 @@ Summary:"""
                 score += 1.0 / (RRF_K + bm25_rank[cid])
             rrf_scores[cid] = score
 
+        logger.info(
+            "Query '%s': RRF fusion - %d entity, %d vector, %d BM25 candidates -> %d unique chunks",
+            question[:50], len(entity_ranked_chunks), len(vector_ranked_chunks),
+            len(bm25_ranked_chunks), len(all_chunk_ids)
+        )
+
         # Get top candidates for reranking
         rerank_count = min(20, len(rrf_scores))
         sorted_by_rrf = sorted(rrf_scores.items(), key=lambda x: x[1], reverse=True)
@@ -594,7 +709,8 @@ Summary:"""
         candidate_chunks = [chunk_map[cid] for cid in candidate_ids if cid in chunk_map]
 
         # --- Cross-encoder reranking ---
-        if len(candidate_chunks) > top_k:
+        # Only rerank when we have enough candidates beyond top_k to benefit
+        if len(candidate_chunks) >= top_k + 5:
             try:
                 cross_enc = self.get_cross_encoder()
                 pairs = [[question, c["content"]] for c in candidate_chunks]
@@ -607,6 +723,16 @@ Summary:"""
                 relevant_chunks = candidate_chunks[:top_k]
         else:
             relevant_chunks = candidate_chunks[:top_k]
+
+        logger.info(
+            "Query '%s': selected %d chunks (from %d candidates, top_k=%d)",
+            question[:50], len(relevant_chunks), len(candidate_chunks), top_k
+        )
+        for i, c in enumerate(relevant_chunks):
+            preview = c["content"][:100].replace("\n", " ")
+            logger.info("  Chunk %d [%s p.%s]: %s...",
+                        i + 1, c.get("original_filename", "?"),
+                        c.get("page_number", "?"), preview)
 
         # Build entity context (supplementary)
         entity_context_lines = []
@@ -642,8 +768,8 @@ Summary:"""
         ))
 
         # Improved prompt structure: question first, source text prominent,
-        # entities as supplementary context, anti-hallucination instructions
-        prompt = f"""You are a helpful assistant that answers questions using ONLY the provided source text. If the source text does not contain enough information to answer the question, say "I don't have enough information to answer this question."
+        # entities as supplementary context, multilingual support
+        prompt = f"""You are a helpful assistant that answers questions using ONLY the provided source text. The source text may be in any language.
 
 Question: {question}
 
@@ -655,8 +781,9 @@ SUPPLEMENTARY FACTS (from knowledge graph):
 
 Instructions:
 - Answer based ONLY on the source text above
+- Answer in the same language as the question
 - Cite sources using [Source N] notation when possible
-- If the information is insufficient, say so
+- Only say you cannot answer if the source text is truly unrelated to the question
 - Be thorough but concise
 
 Answer:"""

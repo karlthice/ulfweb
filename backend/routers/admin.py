@@ -86,8 +86,9 @@ async def get_servers():
 
 @router.get("/servers/active", response_model=list[Server])
 async def get_active_servers():
-    """List only active servers (for chat dropdown)."""
-    return await list_servers(active_only=True)
+    """List only active servers with running processes (for chat dropdown)."""
+    servers = await list_servers(active_only=True)
+    return [s for s in servers if llama_manager.get_status(s.id)]
 
 
 @router.post("/servers", response_model=Server)
