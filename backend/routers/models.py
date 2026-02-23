@@ -5,6 +5,7 @@ from fastapi import APIRouter, HTTPException
 
 from backend.config import settings
 from backend.models import ModelInfo, ModelListResponse
+from backend.services.storage import list_servers
 
 router = APIRouter(prefix="/models", tags=["models"])
 
@@ -13,8 +14,14 @@ router = APIRouter(prefix="/models", tags=["models"])
 async def list_models():
     """Fetch available models from llama.cpp server."""
     try:
+        # Use first active admin server if available, else config.yaml default
+        server_url = settings.llama.url
+        active_servers = await list_servers(active_only=True)
+        if active_servers:
+            server_url = active_servers[0].url
+
         async with httpx.AsyncClient(timeout=10.0) as client:
-            response = await client.get(f"{settings.llama.url}/v1/models")
+            response = await client.get(f"{server_url}/v1/models")
 
             if response.status_code != 200:
                 raise HTTPException(

@@ -16,6 +16,7 @@ from backend.services.storage import (
     get_or_create_user,
     get_server,
     get_user_settings,
+    list_servers,
     touch_conversation,
     update_conversation,
 )
@@ -99,6 +100,11 @@ async def stream_chat_response(
                 server_url = server.url
         except (ValueError, TypeError):
             pass  # Invalid server ID, use default
+    else:
+        # No server selected - fall back to first active admin server
+        active_servers = await list_servers(active_only=True)
+        if active_servers:
+            server_url = active_servers[0].url
 
     assistant_content = ""
 

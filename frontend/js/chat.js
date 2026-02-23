@@ -57,6 +57,10 @@ const chat = {
             const settings = await api.getSettings();
             if (settings && settings.model && this.servers.some(s => s.id.toString() === settings.model)) {
                 serverSelect.value = settings.model;
+            } else if (this.servers.length > 0) {
+                // Auto-select first server for new users and persist it
+                serverSelect.value = this.servers[0].id;
+                await api.updateSettings({ model: this.servers[0].id.toString() });
             }
         } catch (error) {
             console.error('Failed to load servers:', error);
