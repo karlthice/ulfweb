@@ -14,6 +14,12 @@
     border-bottom: 1px solid var(--border);
 }
 
+.header-actions {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+}
+
 .back-link {
     color: var(--accent);
     text-decoration: none;
@@ -22,6 +28,26 @@
 
 .back-link:hover {
     text-decoration: underline;
+}
+
+.restart-ulfweb-btn {
+    padding: 0.5rem 1rem;
+    background: var(--error);
+    color: white;
+    border: none;
+    border-radius: 6px;
+    font-size: 0.85rem;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.restart-ulfweb-btn:hover {
+    background: #dc2626;
+}
+
+.restart-ulfweb-btn:disabled {
+    background: var(--text-muted);
+    cursor: not-allowed;
 }
 
 .admin-content {

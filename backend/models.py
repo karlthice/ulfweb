@@ -116,7 +116,7 @@ class Server(ServerBase):
 
 
 class ServerCreate(ServerBase):
-    pass
+    url: str | None = None
 
 
 class ServerUpdate(BaseModel):

@@ -1,5 +1,9 @@
 """Admin endpoints for site-wide configuration."""
 
+import asyncio
+import os
+import socket
+import sys
 from pathlib import Path
 
 from fastapi import APIRouter, HTTPException
@@ -18,6 +22,13 @@ from backend.services.storage import (
 )
 
 router = APIRouter(prefix="/admin", tags=["admin"])
+
+
+def _find_free_port() -> int:
+    """Find a free port by letting the OS assign one."""
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+        s.bind(("", 0))
+        return s.getsockname()[1]
 
 
 @router.get("/models")
@@ -94,9 +105,14 @@ async def get_active_servers():
 @router.post("/servers", response_model=Server)
 async def add_server(data: ServerCreate):
     """Add a new server."""
+    url = data.url
+    if not url:
+        port = _find_free_port()
+        url = f"http://localhost:{port}"
+
     server = await create_server(
         friendly_name=data.friendly_name,
-        url=data.url,
+        url=url,
         active=data.active,
         model_path=data.model_path,
         parallel=data.parallel,
@@ -235,6 +251,17 @@ async def get_server_process_status(server_id: int):
 
     running = llama_manager.get_status(server_id)
     return {"server_id": server_id, "process_running": running}
+
+
+@router.post("/restart")
+async def restart_ulfweb():
+    """Restart the entire ULF Web application."""
+    def _do_restart():
+        llama_manager.cleanup()
+        os.execv(sys.executable, [sys.executable] + sys.argv)
+
+    asyncio.get_event_loop().call_later(0.5, _do_restart)
+    return {"status": "restarting"}
 
 
 # Admin settings endpoints

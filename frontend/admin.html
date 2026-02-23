@@ -15,7 +15,10 @@
                 <img src="/images/ULF-icon-1-black.png" alt="ULF" class="logo-icon">
                 <span>ULF web - Admin</span>
             </div>
-            <a href="/" class="back-link">Back to Chat</a>
+            <div class="header-actions">
+                <button class="restart-ulfweb-btn" id="restart-ulfweb-btn">Restart ULF Web</button>
+                <a href="/" class="back-link">Back to Chat</a>
+            </div>
         </header>
 
         <main class="admin-content">
@@ -105,7 +108,7 @@
                 </div>
                 <div class="setting-group">
                     <label for="server-url">URL</label>
-                    <input type="text" id="server-url" placeholder="e.g., http://localhost:8081">
+                    <input type="text" id="server-url" placeholder="Leave empty for auto-assign">
                 </div>
                 <div class="setting-group">
                     <label for="server-model-path">Model</label>

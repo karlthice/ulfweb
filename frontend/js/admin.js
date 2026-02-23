@@ -85,6 +85,11 @@ const admin = {
         document.getElementById('skip-contextual-retrieval').addEventListener('change', (e) => {
             this.saveDocumentAiSetting('skip_contextual_retrieval', e.target.checked);
         });
+
+        // Restart ULF Web button
+        document.getElementById('restart-ulfweb-btn').addEventListener('click', () => {
+            this.restartUlfWeb();
+        });
     },
 
     /**
@@ -417,14 +422,14 @@ const admin = {
         const ctxSize = parseInt(ctxSizeInput.value, 10);
         const active = activeInput.checked;
 
-        if (!name || !url) {
-            alert('Please fill in all required fields');
+        if (!name) {
+            alert('Please fill in the server name');
             return;
         }
 
         const data = {
             friendly_name: name,
-            url: url,
+            url: url || undefined,
             model_path: modelPath,
             parallel: parallel,
             ctx_size: ctxSize,
@@ -762,6 +767,44 @@ const admin = {
         if (skipCheckbox) {
             skipCheckbox.checked = !!this.adminSettings.skip_contextual_retrieval;
         }
+    },
+
+    /**
+     * Restart the ULF Web server
+     */
+    async restartUlfWeb() {
+        if (!confirm('Restart ULF Web server? All active connections will be interrupted.')) {
+            return;
+        }
+
+        const btn = document.getElementById('restart-ulfweb-btn');
+        btn.disabled = true;
+        btn.textContent = 'Restarting...';
+
+        try {
+            await fetch(`${API_BASE}/admin/restart`, { method: 'POST' });
+        } catch (error) {
+            // Expected - server is restarting
+        }
+
+        // Poll /health until the server is back up
+        const pollHealth = () => {
+            setTimeout(async () => {
+                try {
+                    const response = await fetch('/health');
+                    if (response.ok) {
+                        window.location.reload();
+                        return;
+                    }
+                } catch (e) {
+                    // Server still down
+                }
+                pollHealth();
+            }, 1000);
+        };
+
+        // Wait a moment before starting to poll
+        setTimeout(pollHealth, 1500);
     },
 
     /**
