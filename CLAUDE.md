@@ -43,7 +43,7 @@ pip install -r requirements.txt
   - `js/chat.js` - Chat UI and message rendering
   - `js/conversations.js` - Sidebar conversation management
   - `js/settings.js` - Settings modal
-- **External dependency:** marked.js (CDN) for markdown rendering
+- **Vendor libs:** `js/vendor/` contains marked.js and pdf.js (bundled locally for offline use)
 
 ### Data Flow
 
