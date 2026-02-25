@@ -280,6 +280,15 @@ async def init_database() -> None:
             )
             await db.commit()
 
+        # Migration: Add whisper_model to admin_settings
+        cursor = await db.execute("PRAGMA table_info(admin_settings)")
+        admin_columns = [row[1] for row in await cursor.fetchall()]
+        if "whisper_model" not in admin_columns:
+            await db.execute(
+                "ALTER TABLE admin_settings ADD COLUMN whisper_model TEXT DEFAULT 'large-v3-turbo'"
+            )
+            await db.commit()
+
         # Migration: Populate FTS index for existing chunks
         cursor = await db.execute("SELECT COUNT(*) FROM document_chunks")
         chunk_count = (await cursor.fetchone())[0]

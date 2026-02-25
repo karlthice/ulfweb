@@ -207,6 +207,7 @@ class AdminSettings(BaseModel):
     document_ai_understanding_server_id: int | None = None
     translation_server_id: int | None = None
     skip_contextual_retrieval: bool = False
+    whisper_model: str = "large-v3-turbo"
 
 
 class AdminSettingsUpdate(BaseModel):
@@ -215,3 +216,4 @@ class AdminSettingsUpdate(BaseModel):
     document_ai_understanding_server_id: int | None = None
     translation_server_id: int | None = None
     skip_contextual_retrieval: bool | None = None
+    whisper_model: str | None = None

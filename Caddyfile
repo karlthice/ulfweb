@@ -1,0 +1,15 @@
+# Caddy reverse proxy for ULF Web
+# Provides HTTPS so browsers allow microphone access on LAN
+#
+# Usage:
+#   sudo setcap cap_net_bind_service=+ep $(which caddy)
+#   caddy run --config Caddyfile
+#
+# Users access: https://192.168.1.103
+# (one-time browser warning on first visit, then mic works)
+
+:443 {
+	tls data/caddy-cert.pem data/caddy-key.pem
+
+	reverse_proxy localhost:8000
+}

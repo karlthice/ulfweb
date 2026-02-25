@@ -72,6 +72,18 @@
                         </select>
                         <p class="setting-hint">The AI server used for text translation. Falls back to the Tilde config if not set.</p>
                     </div>
+                    <div class="setting-group">
+                        <label for="whisper-model">Whisper Model</label>
+                        <select id="whisper-model">
+                            <option value="tiny">tiny</option>
+                            <option value="base">base</option>
+                            <option value="small">small</option>
+                            <option value="medium">medium</option>
+                            <option value="large-v3">large-v3</option>
+                            <option value="large-v3-turbo" selected>large-v3-turbo</option>
+                        </select>
+                        <p class="setting-hint">The Whisper model used for speech-to-text. Larger models are more accurate but slower.</p>
+                    </div>
                     <div class="setting-group checkbox-group">
                         <label>
                             <input type="checkbox" id="skip-contextual-retrieval">

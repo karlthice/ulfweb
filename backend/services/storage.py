@@ -735,7 +735,7 @@ async def get_admin_settings() -> AdminSettings:
         cursor = await db.execute(
             """SELECT document_ai_query_server_id, document_ai_extraction_server_id,
                       document_ai_understanding_server_id, translation_server_id,
-                      skip_contextual_retrieval
+                      skip_contextual_retrieval, whisper_model
                FROM admin_settings WHERE id = 1"""
         )
         row = await cursor.fetchone()
@@ -745,7 +745,8 @@ async def get_admin_settings() -> AdminSettings:
                 document_ai_extraction_server_id=row["document_ai_extraction_server_id"],
                 document_ai_understanding_server_id=row["document_ai_understanding_server_id"],
                 translation_server_id=row["translation_server_id"],
-                skip_contextual_retrieval=bool(row["skip_contextual_retrieval"])
+                skip_contextual_retrieval=bool(row["skip_contextual_retrieval"]),
+                whisper_model=row["whisper_model"] or "large-v3-turbo"
             )
         return AdminSettings()
 
@@ -758,6 +759,7 @@ async def update_admin_settings(updates: dict[str, Any]) -> AdminSettings:
         "document_ai_understanding_server_id",
         "translation_server_id",
         "skip_contextual_retrieval",
+        "whisper_model",
     )
     async with get_db() as db:
         # Ensure row exists

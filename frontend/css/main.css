@@ -1588,3 +1588,170 @@ html, body {
 .translate-section-header select {
     flex: 1;
 }
+
+/* Dictation Area */
+.dictation-area {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    background: var(--bg-primary);
+}
+
+.dictation-header {
+    padding: 0.75rem 1.5rem;
+    border-bottom: 1px solid var(--border);
+    background: var(--bg-primary);
+}
+
+.dictation-header h2 {
+    font-size: 1rem;
+    font-weight: 500;
+    color: var(--text-secondary);
+}
+
+.dictation-content {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+    padding: 1.5rem;
+    max-width: 900px;
+    margin: 0 auto;
+    width: 100%;
+    overflow-y: auto;
+}
+
+/* Microphone Status Banner */
+.mic-status {
+    padding: 0.75rem 1rem;
+    border-radius: 8px;
+    font-size: 0.9rem;
+    line-height: 1.4;
+}
+
+.mic-status-ok {
+    background: #ecfdf5;
+    color: #065f46;
+    border: 1px solid #a7f3d0;
+}
+
+.mic-status-info {
+    background: #eff6ff;
+    color: #1e40af;
+    border: 1px solid #bfdbfe;
+}
+
+.mic-status-error {
+    background: #fef2f2;
+    color: #991b1b;
+    border: 1px solid #fecaca;
+}
+
+.dictation-controls {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    flex-wrap: wrap;
+}
+
+.dictation-controls select {
+    padding: 0.5rem 0.75rem;
+    background: var(--bg-primary);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    color: var(--text-primary);
+    font-size: 0.9rem;
+    cursor: pointer;
+}
+
+.dictation-controls select:focus {
+    outline: none;
+    border-color: var(--accent);
+}
+
+.dictate-btn {
+    padding: 0.75rem 2rem;
+    background: var(--accent);
+    color: white;
+    border: none;
+    border-radius: 8px;
+    font-size: 1rem;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.dictate-btn:hover:not(:disabled) {
+    background: var(--accent-hover);
+}
+
+.dictate-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.dictate-btn.recording {
+    background: var(--error);
+    animation: pulse 1.5s infinite;
+}
+
+.dictate-btn.recording:hover {
+    background: #dc2626;
+}
+
+.recording-indicator {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    color: var(--error);
+    font-size: 0.9rem;
+}
+
+.recording-dot {
+    width: 10px;
+    height: 10px;
+    background: var(--error);
+    border-radius: 50%;
+    animation: pulse 1.5s infinite;
+}
+
+.dictation-result {
+    flex: 1;
+    padding: 1rem;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    color: var(--text-primary);
+    font-family: inherit;
+    font-size: 1rem;
+    line-height: 1.6;
+    resize: none;
+    min-height: 200px;
+}
+
+.dictation-result:focus {
+    outline: none;
+    border-color: var(--accent);
+}
+
+.dictation-actions {
+    display: flex;
+    gap: 0.75rem;
+}
+
+.copy-btn {
+    padding: 0.5rem 1.5rem;
+    background: var(--bg-primary);
+    color: var(--text-primary);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    font-size: 0.9rem;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.copy-btn:hover {
+    background: var(--bg-secondary);
+    border-color: var(--accent);
+    color: var(--accent);
+}

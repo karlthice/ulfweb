@@ -89,6 +89,11 @@ const admin = {
             this.saveDocumentAiSetting('skip_contextual_retrieval', e.target.checked);
         });
 
+        // Whisper model dropdown
+        document.getElementById('whisper-model').addEventListener('change', (e) => {
+            this.saveDocumentAiSetting('whisper_model', e.target.value);
+        });
+
         // Restart ULF Web button
         document.getElementById('restart-ulfweb-btn').addEventListener('click', () => {
             this.restartUlfWeb();
@@ -771,6 +776,12 @@ const admin = {
         if (skipCheckbox) {
             skipCheckbox.checked = !!this.adminSettings.skip_contextual_retrieval;
         }
+
+        // Set whisper model dropdown
+        const whisperSelect = document.getElementById('whisper-model');
+        if (whisperSelect && this.adminSettings.whisper_model) {
+            whisperSelect.value = this.adminSettings.whisper_model;
+        }
     },
 
     /**
@@ -818,8 +829,16 @@ const admin = {
         try {
             // Server IDs are strings from dropdowns — parse to int or null
             // Booleans (e.g. skip_contextual_retrieval) pass through as-is
-            const parsed = typeof value === 'boolean' ? value
-                : value ? parseInt(value) : null;
+            // String settings (e.g. whisper_model) pass through as-is
+            const stringSettings = ['whisper_model'];
+            let parsed;
+            if (typeof value === 'boolean') {
+                parsed = value;
+            } else if (stringSettings.includes(settingKey)) {
+                parsed = value || null;
+            } else {
+                parsed = value ? parseInt(value) : null;
+            }
             const response = await fetch(`${API_BASE}/admin/settings`, {
                 method: 'PUT',
                 headers: { 'Content-Type': 'application/json' },

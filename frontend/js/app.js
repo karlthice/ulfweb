@@ -19,6 +19,7 @@ let currentMode = 'chat';
     await settingsModal.init();
     translate.init();
     documents.init();
+    dictation.init();
 
     console.log('ulfweb initialized');
 })();
@@ -30,9 +31,11 @@ function setupModeTabs() {
     const chatTab = document.getElementById('chat-tab');
     const translateTab = document.getElementById('translate-tab');
     const documentsTab = document.getElementById('documents-tab');
+    const dictationTab = document.getElementById('dictation-tab');
     const chatPanel = document.getElementById('chat-panel');
     const translatePanel = document.getElementById('translate-panel');
     const documentsPanel = document.getElementById('documents-panel');
+    const dictationPanel = document.getElementById('dictation-panel');
     const newChatBtn = document.getElementById('new-chat-btn');
     const conversationsList = document.getElementById('conversations-list');
 
@@ -43,11 +46,13 @@ function setupModeTabs() {
         chatTab.classList.toggle('active', mode === 'chat');
         translateTab.classList.toggle('active', mode === 'translate');
         documentsTab.classList.toggle('active', mode === 'documents');
+        dictationTab.classList.toggle('active', mode === 'dictation');
 
         // Show/hide panels
         chatPanel.classList.toggle('hidden', mode !== 'chat');
         translatePanel.classList.toggle('hidden', mode !== 'translate');
         documentsPanel.classList.toggle('hidden', mode !== 'documents');
+        dictationPanel.classList.toggle('hidden', mode !== 'dictation');
 
         // Show/hide chat-specific sidebar elements
         newChatBtn.classList.toggle('hidden', mode !== 'chat');
@@ -64,6 +69,10 @@ function setupModeTabs() {
 
     documentsTab.addEventListener('click', () => {
         if (currentMode !== 'documents') setActiveTab('documents');
+    });
+
+    dictationTab.addEventListener('click', () => {
+        if (currentMode !== 'dictation') setActiveTab('dictation');
     });
 }
 
