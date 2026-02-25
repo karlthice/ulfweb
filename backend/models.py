@@ -205,6 +205,7 @@ class AdminSettings(BaseModel):
     document_ai_query_server_id: int | None = None
     document_ai_extraction_server_id: int | None = None
     document_ai_understanding_server_id: int | None = None
+    translation_server_id: int | None = None
     skip_contextual_retrieval: bool = False
 
 
@@ -212,4 +213,5 @@ class AdminSettingsUpdate(BaseModel):
     document_ai_query_server_id: int | None = None
     document_ai_extraction_server_id: int | None = None
     document_ai_understanding_server_id: int | None = None
+    translation_server_id: int | None = None
     skip_contextual_retrieval: bool | None = None

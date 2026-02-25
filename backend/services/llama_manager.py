@@ -120,6 +120,7 @@ class LlamaManager:
             "-c", str(ctx_size),
             "--jinja",           # Enable Jinja template processing (required for tool calling)
             "--flash-attn", "on", # Flash attention for better performance
+            "--reasoning-budget", "0",  # Disable thinking/reasoning tokens by default
             "--min-p", "0.01",   # Min-p sampling (Unsloth recommended, llama.cpp default 0.05 is wrong)
             "--temp", "1.0",     # Temperature (Unsloth recommended for Qwen3)
             "--top-p", "0.95",   # Top-p sampling

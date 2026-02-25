@@ -9,6 +9,7 @@ from fastapi.responses import StreamingResponse
 
 from backend.config import settings
 from backend.models import TranslateRequest
+from backend.services.storage import get_admin_settings, get_server
 
 router = APIRouter(prefix="/translate", tags=["translate"])
 
@@ -40,7 +41,18 @@ async def stream_translation(
     source_lang: str,
     target_lang: str
 ) -> AsyncGenerator[str, None]:
-    """Stream translation response from Tilde server."""
+    """Stream translation response from configured translation server."""
+    # Resolve translation server URL: admin setting > config fallback
+    server_url = settings.tilde.url
+    try:
+        admin_settings = await get_admin_settings()
+        if admin_settings.translation_server_id:
+            server = await get_server(admin_settings.translation_server_id)
+            if server:
+                server_url = server.url
+    except Exception:
+        pass  # Fall back to config
+
     source_name = LANGUAGE_NAMES.get(source_lang, source_lang)
     target_name = LANGUAGE_NAMES.get(target_lang, target_lang)
 
@@ -59,7 +71,7 @@ async def stream_translation(
         async with httpx.AsyncClient(timeout=None) as client:
             async with client.stream(
                 "POST",
-                f"{settings.tilde.url}/v1/chat/completions",
+                f"{server_url}/v1/chat/completions",
                 json=payload,
                 headers={"Content-Type": "application/json"}
             ) as response:

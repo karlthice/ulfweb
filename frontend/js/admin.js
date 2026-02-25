@@ -80,6 +80,9 @@ const admin = {
         document.getElementById('document-ai-understanding-server').addEventListener('change', (e) => {
             this.saveDocumentAiSetting('document_ai_understanding_server_id', e.target.value);
         });
+        document.getElementById('translation-server').addEventListener('change', (e) => {
+            this.saveDocumentAiSetting('translation_server_id', e.target.value);
+        });
 
         // Skip contextual retrieval checkbox
         document.getElementById('skip-contextual-retrieval').addEventListener('change', (e) => {
@@ -738,7 +741,8 @@ const admin = {
         const dropdowns = [
             { id: 'document-ai-query-server', setting: 'document_ai_query_server_id' },
             { id: 'document-ai-extraction-server', setting: 'document_ai_extraction_server_id' },
-            { id: 'document-ai-understanding-server', setting: 'document_ai_understanding_server_id' }
+            { id: 'document-ai-understanding-server', setting: 'document_ai_understanding_server_id' },
+            { id: 'translation-server', setting: 'translation_server_id' }
         ];
 
         // Only show active servers in Document AI dropdowns

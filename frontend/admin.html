@@ -65,6 +65,13 @@
                         </select>
                         <p class="setting-hint">The AI server used for document summaries in GraphRAG.</p>
                     </div>
+                    <div class="setting-group">
+                        <label for="translation-server">Translation Server</label>
+                        <select id="translation-server">
+                            <option value="">-- Select a server --</option>
+                        </select>
+                        <p class="setting-hint">The AI server used for text translation. Falls back to the Tilde config if not set.</p>
+                    </div>
                     <div class="setting-group checkbox-group">
                         <label>
                             <input type="checkbox" id="skip-contextual-retrieval">

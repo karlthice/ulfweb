@@ -262,6 +262,15 @@ async def init_database() -> None:
             )
             await db.commit()
 
+        # Migration: Add translation_server_id to admin_settings
+        cursor = await db.execute("PRAGMA table_info(admin_settings)")
+        admin_columns = [row[1] for row in await cursor.fetchall()]
+        if "translation_server_id" not in admin_columns:
+            await db.execute(
+                "ALTER TABLE admin_settings ADD COLUMN translation_server_id INTEGER"
+            )
+            await db.commit()
+
         # Migration: Add skip_contextual_retrieval to admin_settings
         cursor = await db.execute("PRAGMA table_info(admin_settings)")
         admin_columns = [row[1] for row in await cursor.fetchall()]
