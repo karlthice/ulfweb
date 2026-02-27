@@ -1,5 +1,6 @@
 """Speech-to-text service using faster-whisper."""
 
+import os
 import subprocess
 import tempfile
 import time
@@ -24,6 +25,7 @@ class STTService:
     def __init__(self):
         self._model = None
         self._current_model_name: str | None = None
+        self._device: str = "cpu"
 
     @property
     def model_loaded(self) -> bool:
@@ -36,10 +38,27 @@ class STTService:
             return self._model
 
         from faster_whisper import WhisperModel
+        import ctranslate2
 
-        print(f"Loading Whisper model: {model_name}")
-        self._model = WhisperModel(model_name, device="auto", compute_type="default")
+        # Pick optimal settings based on available hardware
+        try:
+            ctranslate2.get_supported_compute_types("cuda")
+            device = "cuda"
+            compute_type = "float16"
+            extra = {}
+            print(f"Loading Whisper model: {model_name} (CUDA, float16)")
+        except RuntimeError:
+            device = "cpu"
+            compute_type = "int8"
+            extra = {"cpu_threads": os.cpu_count() // 2 or 4}
+            print(f"Loading Whisper model: {model_name} (CPU, int8, {extra['cpu_threads']} threads)")
+
+        self._model = WhisperModel(
+            model_name, device=device, compute_type=compute_type,
+            **extra,
+        )
         self._current_model_name = model_name
+        self._device = device
         print(f"Whisper model '{model_name}' loaded")
         return self._model
 
@@ -90,7 +109,13 @@ class STTService:
             if language:
                 kwargs["language"] = language
 
-            segments, info = model.transcribe(wav.name, **kwargs)
+            segments, info = model.transcribe(
+                wav.name,
+                beam_size=5 if self._device == "cuda" else 1,
+                vad_filter=True,
+                initial_prompt="Hello, how are you? Yes, I'm doing well. Let's get started.",
+                **kwargs,
+            )
 
             # Collect all segment texts
             text_parts = []
@@ -146,7 +171,13 @@ class STTService:
             if language:
                 kwargs["language"] = language
 
-            segments, info = model.transcribe(tmp.name, **kwargs)
+            segments, info = model.transcribe(
+                tmp.name,
+                beam_size=5 if self._device == "cuda" else 1,
+                vad_filter=True,
+                initial_prompt="Hello, how are you? Yes, I'm doing well. Let's get started.",
+                **kwargs,
+            )
             text_parts = [seg.text for seg in segments]
 
         return "".join(text_parts).strip()
