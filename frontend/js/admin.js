@@ -103,6 +103,11 @@ const admin = {
             this.saveDocumentAiSetting('whisper_model', e.target.value);
         });
 
+        // Date format dropdown
+        document.getElementById('date-format-select').addEventListener('change', (e) => {
+            this.saveDocumentAiSetting('date_format', e.target.value);
+        });
+
         // System Info button
         document.getElementById('system-info-btn').addEventListener('click', () => {
             this.openSystemInfoModal();
@@ -804,6 +809,12 @@ const admin = {
         if (whisperSelect && this.adminSettings.whisper_model) {
             whisperSelect.value = this.adminSettings.whisper_model;
         }
+
+        // Set date format dropdown
+        const dateFormatSelect = document.getElementById('date-format-select');
+        if (dateFormatSelect && this.adminSettings.date_format) {
+            dateFormatSelect.value = this.adminSettings.date_format;
+        }
     },
 
     /**
@@ -852,7 +863,7 @@ const admin = {
             // Server IDs are strings from dropdowns — parse to int or null
             // Booleans (e.g. skip_contextual_retrieval) pass through as-is
             // String settings (e.g. whisper_model) pass through as-is
-            const stringSettings = ['whisper_model'];
+            const stringSettings = ['whisper_model', 'date_format'];
             let parsed;
             if (typeof value === 'boolean') {
                 parsed = value;

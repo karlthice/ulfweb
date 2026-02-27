@@ -6,9 +6,11 @@ const vault = {
     cases: [],
     currentCase: null,
     searchQuery: '',
+    dateFormat: 'YYYY-MM-DD',
 
-    init() {
+    async init() {
         this.setupEventListeners();
+        this.dateFormat = await api.getDateFormat();
     },
 
     setupEventListeners() {
@@ -188,6 +190,7 @@ const vault = {
                 ${c.is_public ? '<span class="vault-public-badge">public</span>' : ''}
             </div>
             ${c.description ? `<p class="vault-detail-desc">${this.escapeHtml(c.description)}</p>` : ''}
+            ${c.ai_summary ? `<div class="vault-case-summary"><strong>AI Summary</strong><p>${this.escapeHtml(c.ai_summary)}</p></div>` : ''}
             <div class="vault-detail-actions">
                 <button class="vault-btn vault-btn-primary" id="vault-add-record-btn">Add Record</button>
                 <select id="vault-status-select" class="vault-status-select">
@@ -255,11 +258,16 @@ const vault = {
                 <div class="vault-record-info">
                     <div class="vault-record-title">${this.escapeHtml(r.title || 'Untitled')}</div>
                     <div class="vault-record-meta">
-                        ${r.record_date} &middot; ${r.record_type}
+                        ${this.formatDate(r.record_date)} &middot; ${r.record_type}
                         ${r.original_filename ? ` &middot; ${this.escapeHtml(r.original_filename)}` : ''}
                         ${r.file_size ? ` (${this.formatSize(r.file_size)})` : ''}
                     </div>
-                    ${r.content ? `<div class="vault-record-snippet">${this.escapeHtml(r.content.substring(0, 150))}${r.content.length > 150 ? '...' : ''}</div>` : ''}
+                    ${r.content ? (r.content.length > 150 ? `
+                        <details class="vault-record-expandable">
+                            <summary class="vault-record-snippet">${this.escapeHtml(r.content.substring(0, 150))}...</summary>
+                            <div class="vault-record-full-content">${this.escapeHtml(r.content)}</div>
+                        </details>
+                    ` : `<div class="vault-record-snippet">${this.escapeHtml(r.content)}</div>`) : ''}
                     ${r.ai_description ? `
                         <details class="vault-ai-desc">
                             <summary>AI Description</summary>
@@ -447,7 +455,7 @@ const vault = {
         try {
             await api.deleteVaultRecord(recordId);
             this.currentCase.records = this.currentCase.records.filter(r => r.id !== recordId);
-            this.renderRecordList();
+            this.showCaseDetail();
         } catch (error) {
             alert('Failed to delete record: ' + error.message);
         }
@@ -466,7 +474,18 @@ const vault = {
     formatDate(dateStr) {
         if (!dateStr) return '';
         const d = new Date(dateStr);
-        return d.toLocaleDateString();
+        const y = d.getFullYear();
+        const m = d.getMonth() + 1;
+        const day = d.getDate();
+        const pad = (n) => String(n).padStart(2, '0');
+        const monthNames = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+        switch (this.dateFormat) {
+            case 'DD/MM/YYYY': return `${pad(day)}/${pad(m)}/${y}`;
+            case 'MM/DD/YYYY': return `${pad(m)}/${pad(day)}/${y}`;
+            case 'DD.MM.YYYY': return `${pad(day)}.${pad(m)}.${y}`;
+            case 'D MMM YYYY': return `${day} ${monthNames[m - 1]} ${y}`;
+            default: return `${y}-${pad(m)}-${pad(day)}`;
+        }
     },
 
     formatSize(bytes) {

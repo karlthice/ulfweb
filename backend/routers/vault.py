@@ -164,6 +164,9 @@ async def add_record(
             original_filename,
         )
 
+    # Generate case AI summary in background (regenerate from all records)
+    background_tasks.add_task(generate_case_ai_summary, case_id)
+
     return record
 
 
@@ -188,7 +191,7 @@ async def toggle_star(record_id: int, request: Request):
 
 
 @router.delete("/records/{record_id}")
-async def delete_record(record_id: int, request: Request):
+async def delete_record(record_id: int, request: Request, background_tasks: BackgroundTasks):
     """Delete a vault record."""
     ip = get_client_ip(request)
     user_id = await storage.get_or_create_user(ip)
@@ -201,6 +204,8 @@ async def delete_record(record_id: int, request: Request):
     if not case or case.user_id != user_id:
         raise HTTPException(status_code=403, detail="Not authorized")
 
+    case_id = record.case_id
+
     # Clean up file
     if record.filename:
         file_path = VAULT_DIR / record.filename
@@ -210,6 +215,10 @@ async def delete_record(record_id: int, request: Request):
     deleted = await storage.delete_vault_record(record_id)
     if not deleted:
         raise HTTPException(status_code=404, detail="Record not found")
+
+    # Regenerate case AI summary after deletion
+    background_tasks.add_task(generate_case_ai_summary, case_id)
+
     return {"status": "deleted"}
 
 
@@ -246,6 +255,91 @@ async def search_records(q: str, request: Request, case_id: int | None = None):
     user_id = await storage.get_or_create_user(ip)
     results = await storage.search_vault_records(user_id, q, case_id)
     return results
+
+
+async def generate_case_ai_summary(case_id: int):
+    """Background task: generate AI summary for a case from all its records."""
+    try:
+        from backend.database import get_db
+
+        # Fetch case info and all records
+        async with get_db() as db:
+            cursor = await db.execute(
+                "SELECT name, identifier, description FROM vault_cases WHERE id = ?",
+                (case_id,)
+            )
+            case_row = await cursor.fetchone()
+            if not case_row:
+                return
+
+            case_info = dict(case_row)
+
+            cursor = await db.execute(
+                """SELECT record_type, title, content, ai_description, record_date
+                   FROM vault_records
+                   WHERE case_id = ?
+                   ORDER BY record_date ASC, created_at ASC""",
+                (case_id,)
+            )
+            records = [dict(r) for r in await cursor.fetchall()]
+
+        # If no records, clear the summary
+        if not records:
+            await storage.update_vault_case_ai_summary(case_id, "")
+            return
+
+        admin_settings = await storage.get_admin_settings()
+        server_id = admin_settings.vault_text_server_id
+        if not server_id:
+            return
+
+        server = await storage.get_server(server_id)
+        if not server or not server.active:
+            return
+
+        # Build record context
+        record_lines = []
+        for r in records:
+            if r["record_type"] == "text":
+                snippet = (r["content"] or "")[:300]
+            else:
+                snippet = (r["ai_description"] or "No description available")[:300]
+            record_lines.append(
+                f"- [{r['record_date']}] {r['title'] or 'Untitled'} ({r['record_type']}): {snippet}"
+            )
+
+        prompt = (
+            f"Summarize this case in 200-300 words based on the records below. "
+            f"Include key dates, events, and current status.\n\n"
+            f"Case: {case_info['name']} ({case_info['identifier']})\n"
+            f"Description: {case_info['description'] or 'N/A'}\n\n"
+            f"Records (chronological):\n" + "\n".join(record_lines)
+        )
+
+        payload = {
+            "messages": [{"role": "user", "content": prompt}],
+            "stream": False,
+            "temperature": 0.3,
+            "max_tokens": 1024,
+        }
+
+        async with httpx.AsyncClient(timeout=120.0) as client:
+            response = await client.post(
+                f"{server.url}/v1/chat/completions",
+                json=payload,
+                headers={"Content-Type": "application/json"},
+            )
+            if response.status_code == 200:
+                data = response.json()
+                if "choices" in data and data["choices"]:
+                    summary = data["choices"][0]["message"]["content"]
+                    await storage.update_vault_case_ai_summary(case_id, summary)
+
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).warning(
+            f"Failed to generate AI summary for case {case_id}: {e}"
+        )
 
 
 async def generate_ai_description(

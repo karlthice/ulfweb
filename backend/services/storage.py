@@ -739,7 +739,8 @@ async def get_admin_settings() -> AdminSettings:
             """SELECT document_ai_query_server_id, document_ai_extraction_server_id,
                       document_ai_understanding_server_id, translation_server_id,
                       skip_contextual_retrieval, whisper_model,
-                      vault_image_server_id, vault_text_server_id
+                      vault_image_server_id, vault_text_server_id,
+                      date_format
                FROM admin_settings WHERE id = 1"""
         )
         row = await cursor.fetchone()
@@ -753,6 +754,7 @@ async def get_admin_settings() -> AdminSettings:
                 whisper_model=row["whisper_model"] or "large-v3-turbo",
                 vault_image_server_id=row["vault_image_server_id"],
                 vault_text_server_id=row["vault_text_server_id"],
+                date_format=row["date_format"] or "YYYY-MM-DD",
             )
         return AdminSettings()
 
@@ -768,6 +770,7 @@ async def update_admin_settings(updates: dict[str, Any]) -> AdminSettings:
         "whisper_model",
         "vault_image_server_id",
         "vault_text_server_id",
+        "date_format",
     )
     async with get_db() as db:
         # Ensure row exists
@@ -797,7 +800,7 @@ async def list_vault_cases(user_id: int) -> list[VaultCase]:
     async with get_db() as db:
         cursor = await db.execute(
             """SELECT id, user_id, identifier, name, description, is_public, status,
-                      created_at, updated_at
+                      ai_summary, created_at, updated_at
                FROM vault_cases
                WHERE user_id = ? OR is_public = 1
                ORDER BY updated_at DESC""",
@@ -832,7 +835,7 @@ async def get_vault_case(case_id: int, user_id: int) -> VaultCaseWithRecords | N
     async with get_db() as db:
         cursor = await db.execute(
             """SELECT id, user_id, identifier, name, description, is_public, status,
-                      created_at, updated_at
+                      ai_summary, created_at, updated_at
                FROM vault_cases
                WHERE id = ? AND (user_id = ? OR is_public = 1)""",
             (case_id, user_id)
@@ -863,7 +866,7 @@ async def update_vault_case(case_id: int, user_id: int, updates: dict[str, Any])
         set_clauses = ["updated_at = ?"]
         values: list[Any] = [datetime.utcnow()]
 
-        valid_keys = ("identifier", "name", "description", "is_public", "status")
+        valid_keys = ("identifier", "name", "description", "is_public", "status", "ai_summary")
         for key, value in updates.items():
             if key not in valid_keys or value is None:
                 continue
@@ -886,7 +889,7 @@ async def update_vault_case(case_id: int, user_id: int, updates: dict[str, Any])
 
         cursor = await db.execute(
             """SELECT id, user_id, identifier, name, description, is_public, status,
-                      created_at, updated_at
+                      ai_summary, created_at, updated_at
                FROM vault_cases WHERE id = ?""",
             (case_id,)
         )
@@ -911,7 +914,7 @@ async def search_vault_cases(user_id: int, query: str) -> list[VaultCase]:
         pattern = f"%{query}%"
         cursor = await db.execute(
             """SELECT id, user_id, identifier, name, description, is_public, status,
-                      created_at, updated_at
+                      ai_summary, created_at, updated_at
                FROM vault_cases
                WHERE (user_id = ? OR is_public = 1)
                  AND (name LIKE ? OR identifier LIKE ?)
@@ -1003,6 +1006,16 @@ async def update_vault_record_ai_description(record_id: int, ai_description: str
         await db.execute(
             "UPDATE vault_records SET ai_description = ? WHERE id = ?",
             (ai_description, record_id)
+        )
+        await db.commit()
+
+
+async def update_vault_case_ai_summary(case_id: int, ai_summary: str) -> None:
+    """Update AI summary for a vault case."""
+    async with get_db() as db:
+        await db.execute(
+            "UPDATE vault_cases SET ai_summary = ? WHERE id = ?",
+            (ai_summary, case_id)
         )
         await db.commit()
 

@@ -40,6 +40,27 @@
 
             <section class="admin-section">
                 <div class="section-header">
+                    <h2>Display</h2>
+                </div>
+                <p class="section-description">Configure site-wide display settings.</p>
+
+                <div class="settings-form">
+                    <div class="setting-group">
+                        <label for="date-format-select">Date Format</label>
+                        <select id="date-format-select">
+                            <option value="YYYY-MM-DD">YYYY-MM-DD (ISO)</option>
+                            <option value="DD/MM/YYYY">DD/MM/YYYY (European)</option>
+                            <option value="MM/DD/YYYY">MM/DD/YYYY (US)</option>
+                            <option value="DD.MM.YYYY">DD.MM.YYYY (Continental)</option>
+                            <option value="D MMM YYYY">D MMM YYYY (Short month)</option>
+                        </select>
+                        <p class="setting-hint">Date format used across the application (e.g. in the vault).</p>
+                    </div>
+                </div>
+            </section>
+
+            <section class="admin-section">
+                <div class="section-header">
                     <h2>Document Settings</h2>
                 </div>
                 <p class="section-description">Configure AI servers for document processing and search.</p>

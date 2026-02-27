@@ -327,3 +327,10 @@ async def update_settings(data: AdminSettingsUpdate):
     """Update admin settings."""
     updates = data.model_dump(exclude_unset=True)
     return await update_admin_settings(updates)
+
+
+@router.get("/date-format")
+async def get_date_format():
+    """Get the configured date format (public endpoint)."""
+    settings = await get_admin_settings()
+    return {"date_format": settings.date_format}

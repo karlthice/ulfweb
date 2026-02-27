@@ -270,5 +270,16 @@ const api = {
 
     getVaultRecordFileUrl(recordId) {
         return `${API_BASE}/vault/records/${recordId}/file`;
+    },
+
+    async getDateFormat() {
+        try {
+            const response = await fetch(`${API_BASE}/admin/date-format`);
+            if (!response.ok) return 'YYYY-MM-DD';
+            const data = await response.json();
+            return data.date_format || 'YYYY-MM-DD';
+        } catch {
+            return 'YYYY-MM-DD';
+        }
     }
 };

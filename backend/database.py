@@ -157,6 +157,7 @@ CREATE TABLE IF NOT EXISTS admin_settings (
     document_ai_query_server_id INTEGER,
     document_ai_extraction_server_id INTEGER,
     document_ai_understanding_server_id INTEGER,
+    date_format TEXT DEFAULT 'YYYY-MM-DD',
     FOREIGN KEY (document_ai_query_server_id) REFERENCES servers(id) ON DELETE SET NULL,
     FOREIGN KEY (document_ai_extraction_server_id) REFERENCES servers(id) ON DELETE SET NULL,
     FOREIGN KEY (document_ai_understanding_server_id) REFERENCES servers(id) ON DELETE SET NULL
@@ -174,6 +175,7 @@ CREATE TABLE IF NOT EXISTS vault_cases (
     description TEXT DEFAULT '',
     is_public INTEGER DEFAULT 0,
     status TEXT DEFAULT 'active' CHECK(status IN ('active', 'closed', 'archived')),
+    ai_summary TEXT DEFAULT '',
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (user_id) REFERENCES users(id)
@@ -337,6 +339,24 @@ async def init_database() -> None:
         if "vault_text_server_id" not in admin_columns:
             await db.execute(
                 "ALTER TABLE admin_settings ADD COLUMN vault_text_server_id INTEGER"
+            )
+            await db.commit()
+
+        # Migration: Add date_format to admin_settings
+        cursor = await db.execute("PRAGMA table_info(admin_settings)")
+        admin_columns = [row[1] for row in await cursor.fetchall()]
+        if "date_format" not in admin_columns:
+            await db.execute(
+                "ALTER TABLE admin_settings ADD COLUMN date_format TEXT DEFAULT 'YYYY-MM-DD'"
+            )
+            await db.commit()
+
+        # Migration: Add ai_summary to vault_cases
+        cursor = await db.execute("PRAGMA table_info(vault_cases)")
+        vault_columns = [row[1] for row in await cursor.fetchall()]
+        if "ai_summary" not in vault_columns:
+            await db.execute(
+                "ALTER TABLE vault_cases ADD COLUMN ai_summary TEXT DEFAULT ''"
             )
             await db.commit()
 

@@ -2128,6 +2128,31 @@ html, body {
     font-size: 0.9rem;
 }
 
+.vault-case-summary {
+    margin-top: 0.75rem;
+    padding: 0.75rem 1rem;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    font-size: 0.85rem;
+    color: var(--text-secondary);
+    line-height: 1.5;
+}
+
+.vault-case-summary strong {
+    display: block;
+    margin-bottom: 0.25rem;
+    font-size: 0.8rem;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+}
+
+.vault-case-summary p {
+    margin: 0;
+    white-space: pre-wrap;
+}
+
 .vault-detail-actions {
     display: flex;
     align-items: center;
@@ -2219,6 +2244,37 @@ html, body {
     color: var(--text-secondary);
     margin-top: 0.25rem;
     line-height: 1.4;
+    cursor: pointer;
+}
+
+.vault-record-expandable {
+    margin-top: 0.25rem;
+}
+
+.vault-record-expandable summary {
+    list-style: none;
+}
+
+.vault-record-expandable summary::marker,
+.vault-record-expandable summary::-webkit-details-marker {
+    display: none;
+}
+
+.vault-record-expandable summary::after {
+    content: ' [show more]';
+    color: var(--accent);
+    font-size: 0.8rem;
+}
+
+.vault-record-expandable[open] summary {
+    display: none;
+}
+
+.vault-record-full-content {
+    font-size: 0.85rem;
+    color: var(--text-secondary);
+    line-height: 1.5;
+    white-space: pre-wrap;
 }
 
 .vault-record-actions {
