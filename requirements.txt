@@ -16,3 +16,7 @@ lingua-language-detector>=2.0.0
 tqdm>=4.65.0
 requests>=2.31.0
 faster-whisper>=1.0.0
+speechbrain>=1.0.0
+torchaudio>=2.0.0
+torchcodec>=0.10.0
+scipy>=1.10.0

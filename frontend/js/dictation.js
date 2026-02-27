@@ -6,10 +6,17 @@ const dictation = {
     mediaRecorder: null,
     audioChunks: [],
     isRecording: false,
+    recordingStartTime: null,
+    timerInterval: null,
+    audioContext: null,
+    analyser: null,
+    animationFrameId: null,
 
     init() {
         this.dictateBtn = document.getElementById('dictate-btn');
         this.recordingIndicator = document.getElementById('recording-indicator');
+        this.recordingTimer = document.getElementById('recording-timer');
+        this.audioLevelCanvas = document.getElementById('audio-level');
         this.resultArea = document.getElementById('dictation-result');
         this.copyBtn = document.getElementById('dictation-copy-btn');
         this.languageSelect = document.getElementById('dictation-language');
@@ -103,6 +110,116 @@ const dictation = {
         this.micStatus.classList.remove('hidden');
     },
 
+    /**
+     * Format elapsed seconds as M:SS
+     */
+    formatTime(seconds) {
+        const m = Math.floor(seconds / 60);
+        const s = seconds % 60;
+        return m + ':' + String(s).padStart(2, '0');
+    },
+
+    /**
+     * Start the recording duration timer
+     */
+    startTimer() {
+        this.recordingStartTime = Date.now();
+        this.updateTimerDisplay();
+        this.timerInterval = setInterval(() => this.updateTimerDisplay(), 1000);
+    },
+
+    updateTimerDisplay() {
+        const elapsed = Math.floor((Date.now() - this.recordingStartTime) / 1000);
+        this.recordingTimer.textContent = 'Recording... ' + this.formatTime(elapsed);
+    },
+
+    stopTimer() {
+        if (this.timerInterval) {
+            clearInterval(this.timerInterval);
+            this.timerInterval = null;
+        }
+        this.recordingStartTime = null;
+        this.recordingTimer.textContent = 'Recording... 0:00';
+    },
+
+    /**
+     * Start audio level visualization using AnalyserNode
+     */
+    startAudioLevel(stream) {
+        try {
+            this.audioContext = new (window.AudioContext || window.webkitAudioContext)();
+            const source = this.audioContext.createMediaStreamSource(stream);
+            this.analyser = this.audioContext.createAnalyser();
+            this.analyser.fftSize = 256;
+            source.connect(this.analyser);
+
+            const dataArray = new Uint8Array(this.analyser.frequencyBinCount);
+            const canvas = this.audioLevelCanvas;
+            const ctx = canvas.getContext('2d');
+
+            const draw = () => {
+                this.animationFrameId = requestAnimationFrame(draw);
+                this.analyser.getByteFrequencyData(dataArray);
+
+                // Compute average level
+                let sum = 0;
+                for (let i = 0; i < dataArray.length; i++) {
+                    sum += dataArray[i];
+                }
+                const avg = sum / dataArray.length;
+                const level = avg / 255; // 0..1
+
+                const w = canvas.width;
+                const h = canvas.height;
+                ctx.clearRect(0, 0, w, h);
+
+                // Background bar
+                ctx.fillStyle = '#e5e7eb';
+                ctx.beginPath();
+                ctx.roundRect(0, 0, w, h, 4);
+                ctx.fill();
+
+                // Level bar with color gradient (green → yellow → red)
+                const barWidth = Math.max(0, level * w);
+                if (barWidth > 0) {
+                    let color;
+                    if (level < 0.4) {
+                        color = '#10a37f'; // green (accent)
+                    } else if (level < 0.7) {
+                        color = '#f59e0b'; // yellow/amber
+                    } else {
+                        color = '#ef4444'; // red
+                    }
+                    ctx.fillStyle = color;
+                    ctx.beginPath();
+                    ctx.roundRect(0, 0, barWidth, h, 4);
+                    ctx.fill();
+                }
+            };
+
+            draw();
+        } catch (err) {
+            console.warn('Audio level visualization not available:', err);
+        }
+    },
+
+    stopAudioLevel() {
+        if (this.animationFrameId) {
+            cancelAnimationFrame(this.animationFrameId);
+            this.animationFrameId = null;
+        }
+        if (this.audioContext) {
+            this.audioContext.close().catch(() => {});
+            this.audioContext = null;
+            this.analyser = null;
+        }
+        // Clear canvas
+        if (this.audioLevelCanvas) {
+            const ctx = this.audioLevelCanvas.getContext('2d');
+            ctx.clearRect(0, 0, this.audioLevelCanvas.width, this.audioLevelCanvas.height);
+        }
+    },
+
     async startRecording() {
         // Check secure context before attempting
         if (!window.isSecureContext) {
@@ -147,6 +264,10 @@ const dictation = {
             this.dictateBtn.textContent = 'Stop';
             this.dictateBtn.classList.add('recording');
             this.recordingIndicator.classList.remove('hidden');
+
+            // Start timer and audio level visualization
+            this.startTimer();
+            this.startAudioLevel(stream);
         } catch (err) {
             console.error('Microphone error:', err);
             if (err.name === 'NotAllowedError' || err.name === 'PermissionDeniedError') {
@@ -172,11 +293,27 @@ const dictation = {
         this.dictateBtn.textContent = 'Dictate';
         this.dictateBtn.classList.remove('recording');
         this.recordingIndicator.classList.add('hidden');
+
+        // Stop timer and audio level visualization
+        this.stopTimer();
+        this.stopAudioLevel();
     },
 
     async transcribe(blob) {
-        this.resultArea.value = 'Transcribing...';
         this.dictateBtn.disabled = true;
+
+        // Check if model is loaded to show appropriate status
+        try {
+            const statusResp = await fetch('/api/v1/stt/status');
+            if (statusResp.ok) {
+                const status = await statusResp.json();
+                this.resultArea.value = status.model_loaded ? 'Transcribing...' : 'Loading model...';
+            } else {
+                this.resultArea.value = 'Transcribing...';
+            }
+        } catch {
+            this.resultArea.value = 'Transcribing...';
+        }
 
         const formData = new FormData();
         formData.append('audio', blob, 'recording.webm');

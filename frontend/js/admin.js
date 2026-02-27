@@ -51,6 +51,7 @@ const admin = {
             if (e.key === 'Escape') {
                 this.closeServerModal();
                 this.closeCollectionModal();
+                this.closeSystemInfoModal();
             }
         });
 
@@ -92,6 +93,17 @@ const admin = {
         // Whisper model dropdown
         document.getElementById('whisper-model').addEventListener('change', (e) => {
             this.saveDocumentAiSetting('whisper_model', e.target.value);
+        });
+
+        // System Info button
+        document.getElementById('system-info-btn').addEventListener('click', () => {
+            this.openSystemInfoModal();
+        });
+        document.getElementById('close-system-info-modal').addEventListener('click', () => {
+            this.closeSystemInfoModal();
+        });
+        document.getElementById('system-info-modal-overlay').addEventListener('click', () => {
+            this.closeSystemInfoModal();
         });
 
         // Restart ULF Web button
@@ -858,6 +870,106 @@ const admin = {
             // Revert dropdown to previous value
             this.populateDocumentAiDropdowns();
         }
+    },
+
+    // System Info methods
+
+    async openSystemInfoModal() {
+        const modal = document.getElementById('system-info-modal');
+        const body = document.getElementById('system-info-body');
+        body.innerHTML = '<p>Loading...</p>';
+        modal.classList.remove('hidden');
+
+        try {
+            const response = await fetch(`${API_BASE}/admin/system-info`);
+            if (!response.ok) throw new Error('Failed to fetch system info');
+            const data = await response.json();
+            this.renderSystemInfo(data);
+        } catch (error) {
+            console.error('Failed to load system info:', error);
+            body.innerHTML = `<p style="color: var(--error);">Failed to load system info.</p>`;
+        }
+    },
+
+    closeSystemInfoModal() {
+        document.getElementById('system-info-modal').classList.add('hidden');
+    },
+
+    renderSystemInfo(data) {
+        const body = document.getElementById('system-info-body');
+        let html = '';
+
+        // RAM section
+        html += '<h3 class="sysinfo-section-title">System RAM</h3>';
+        html += this.renderMemoryBar(data.ram.used, data.ram.total);
+        html += `<div class="sysinfo-details">
+            <span>Used: ${this.formatBytes(data.ram.used)}</span>
+            <span>Available: ${this.formatBytes(data.ram.available)}</span>
+            <span>Total: ${this.formatBytes(data.ram.total)}</span>
+        </div>`;
+
+        // VRAM section
+        html += '<h3 class="sysinfo-section-title">GPU VRAM</h3>';
+        if (data.gpu) {
+            html += this.renderMemoryBar(data.gpu.used, data.gpu.total);
+            html += `<div class="sysinfo-details">
+                <span>Used: ${this.formatBytes(data.gpu.used)}</span>
+                <span>Free: ${this.formatBytes(data.gpu.free)}</span>
+                <span>Total: ${this.formatBytes(data.gpu.total)}</span>
+            </div>`;
+        } else {
+            html += '<p class="sysinfo-none">No GPU detected</p>';
+        }
+
+        // Models section
+        html += '<h3 class="sysinfo-section-title">Loaded Models</h3>';
+        if (data.models.length === 0) {
+            html += '<p class="sysinfo-none">No models loaded</p>';
+        } else {
+            for (const model of data.models) {
+                const modeLabels = {
+                    vram_only: 'VRAM only',
+                    vram_and_ram: 'VRAM + RAM',
+                    ram_only: 'RAM only'
+                };
+                const modeLabel = modeLabels[model.memory_mode] || model.memory_mode;
+
+                html += `<div class="sysinfo-model-item">
+                    <div class="sysinfo-model-header">
+                        <span class="sysinfo-model-name">${this.escapeHtml(model.server_name)}</span>
+                        <span class="sysinfo-mode-badge ${model.memory_mode}">${modeLabel}</span>
+                    </div>
+                    <div class="sysinfo-model-file">${this.escapeHtml(model.model_file || 'Unknown')}</div>
+                    <div class="sysinfo-model-stats">
+                        <span>RAM: ${this.formatBytes(model.ram_bytes)}</span>
+                        ${model.vram_bytes > 0 ? `<span>VRAM: ${this.formatBytes(model.vram_bytes)}</span>` : ''}
+                        ${model.gtt_bytes > 0 ? `<span>GTT: ${this.formatBytes(model.gtt_bytes)}</span>` : ''}
+                    </div>
+                </div>`;
+            }
+        }
+
+        body.innerHTML = html;
+    },
+
+    renderMemoryBar(used, total) {
+        if (total === 0) return '';
+        const pct = Math.round((used / total) * 100);
+        let colorClass = 'green';
+        if (pct >= 90) colorClass = 'red';
+        else if (pct >= 70) colorClass = 'amber';
+
+        return `<div class="sysinfo-bar-container">
+            <div class="sysinfo-bar ${colorClass}" style="width: ${pct}%"></div>
+        </div>`;
+    },
+
+    formatBytes(bytes) {
+        if (bytes === 0) return '0 B';
+        const units = ['B', 'KB', 'MB', 'GB', 'TB'];
+        const i = Math.floor(Math.log(bytes) / Math.log(1024));
+        const val = bytes / Math.pow(1024, i);
+        return `${val.toFixed(1)} ${units[i]}`;
     }
 };
 

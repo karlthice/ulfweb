@@ -16,6 +16,7 @@
                 <span>ULF web - Admin</span>
             </div>
             <div class="header-actions">
+                <button class="system-info-btn" id="system-info-btn">System Info</button>
                 <button class="restart-ulfweb-btn" id="restart-ulfweb-btn">Restart ULF Web</button>
                 <a href="/" class="back-link">Back to Chat</a>
             </div>
@@ -81,6 +82,7 @@
                             <option value="medium">medium</option>
                             <option value="large-v3">large-v3</option>
                             <option value="large-v3-turbo" selected>large-v3-turbo</option>
+                            <option value="language-and-voice-lab/whisper-large-icelandic-62640-steps-967h-ct2">large-icelandic (RU)</option>
                         </select>
                         <p class="setting-hint">The Whisper model used for speech-to-text. Larger models are more accurate but slower.</p>
                     </div>
@@ -191,6 +193,20 @@
             </div>
             <div class="modal-footer">
                 <button class="save-btn" id="save-collection-btn">Save Collection</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- System Info Modal -->
+    <div class="modal hidden" id="system-info-modal">
+        <div class="modal-overlay" id="system-info-modal-overlay"></div>
+        <div class="modal-content system-info-modal-content">
+            <div class="modal-header">
+                <h2>System Info</h2>
+                <button class="close-btn" id="close-system-info-modal">&times;</button>
+            </div>
+            <div class="modal-body" id="system-info-body">
+                <p>Loading...</p>
             </div>
         </div>
     </div>

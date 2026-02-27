@@ -20,6 +20,7 @@ let currentMode = 'chat';
     translate.init();
     documents.init();
     dictation.init();
+    meeting.init();
 
     console.log('ulfweb initialized');
 })();

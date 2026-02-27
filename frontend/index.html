@@ -192,9 +192,23 @@
                         <option value="">Auto-detect</option>
                     </select>
                     <button class="dictate-btn" id="dictate-btn">Dictate</button>
+                    <button class="dictate-btn meeting-btn" id="meeting-btn">Dictate meeting</button>
                     <div class="recording-indicator hidden" id="recording-indicator">
                         <span class="recording-dot"></span>
-                        Recording...
+                        <span id="recording-timer">Recording... 0:00</span>
+                        <canvas id="audio-level" width="120" height="20"></canvas>
+                    </div>
+                    <div class="recording-indicator hidden" id="meeting-recording-indicator">
+                        <span class="recording-dot"></span>
+                        <span id="meeting-recording-timer">Recording meeting... 0:00</span>
+                        <canvas id="meeting-audio-level" width="120" height="20"></canvas>
+                        <span class="chunk-status" id="chunk-status"></span>
+                    </div>
+                </div>
+                <div class="meeting-progress hidden" id="meeting-progress">
+                    <div class="progress-status" id="meeting-progress-status">Processing...</div>
+                    <div class="progress-bar">
+                        <div class="progress-fill" id="meeting-progress-fill"></div>
                     </div>
                 </div>
                 <textarea id="dictation-result" class="dictation-result" placeholder="Transcription will appear here..." readonly></textarea>
@@ -298,6 +312,7 @@
     <script src="/js/translate.js"></script>
     <script src="/js/documents.js"></script>
     <script src="/js/dictation.js"></script>
+    <script src="/js/meeting.js"></script>
     <script src="/js/app.js"></script>
 </body>
 </html>

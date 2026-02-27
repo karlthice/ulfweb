@@ -1,6 +1,6 @@
 """Speech-to-text service using faster-whisper."""
 
-import io
+import subprocess
 import tempfile
 import time
 from typing import Optional
@@ -18,11 +18,17 @@ class STTService:
         "medium",
         "large-v3",
         "large-v3-turbo",
+        "language-and-voice-lab/whisper-large-icelandic-62640-steps-967h-ct2",
     ]
 
     def __init__(self):
         self._model = None
         self._current_model_name: str | None = None
+
+    @property
+    def model_loaded(self) -> bool:
+        """Whether a Whisper model is currently loaded in memory."""
+        return self._model is not None
 
     def _get_model(self, model_name: str):
         """Get or load a Whisper model (lazy loading)."""
@@ -55,10 +61,28 @@ class STTService:
 
         model = self._get_model(model_name)
 
-        # Write audio to temp file (faster-whisper needs a file path)
-        with tempfile.NamedTemporaryFile(suffix=".webm", delete=True) as tmp:
-            tmp.write(audio_bytes)
-            tmp.flush()
+        # Write audio to temp file, then convert to WAV for reliable decoding.
+        # WebM files from MediaRecorder often lack proper duration/seek metadata,
+        # which can cause Whisper to only decode the tail end of longer recordings.
+        with tempfile.NamedTemporaryFile(suffix=".webm", delete=True) as raw, \
+             tempfile.NamedTemporaryFile(suffix=".wav", delete=True) as wav:
+            raw.write(audio_bytes)
+            raw.flush()
+
+            result = subprocess.run(
+                [
+                    "ffmpeg", "-y",
+                    "-i", raw.name,
+                    "-ar", "16000",
+                    "-ac", "1",
+                    "-f", "wav",
+                    wav.name,
+                ],
+                capture_output=True,
+                text=True,
+            )
+            if result.returncode != 0:
+                raise RuntimeError(f"ffmpeg conversion failed: {result.stderr}")
 
             start_time = time.time()
 
@@ -66,7 +90,7 @@ class STTService:
             if language:
                 kwargs["language"] = language
 
-            segments, info = model.transcribe(tmp.name, **kwargs)
+            segments, info = model.transcribe(wav.name, **kwargs)
 
             # Collect all segment texts
             text_parts = []
@@ -82,6 +106,50 @@ class STTService:
             "language": info.language,
             "duration": round(elapsed, 2),
         }
+
+    def transcribe_file_segment(
+        self, wav_path: str, start: float, end: float,
+        model_name: str, language: Optional[str] = None,
+    ) -> str:
+        """Transcribe a time range from a WAV file (synchronous).
+
+        Uses ffmpeg to extract the segment, then transcribes with faster-whisper.
+
+        Returns the transcribed text, or empty string for very short segments.
+        """
+        duration = end - start
+        if duration < 0.5:
+            return ""
+
+        model = self._get_model(model_name)
+
+        # Extract segment to temp file using ffmpeg
+        with tempfile.NamedTemporaryFile(suffix=".wav", delete=True) as tmp:
+            result = subprocess.run(
+                [
+                    "ffmpeg", "-y",
+                    "-i", wav_path,
+                    "-ss", str(start),
+                    "-to", str(end),
+                    "-ar", "16000",
+                    "-ac", "1",
+                    "-f", "wav",
+                    tmp.name,
+                ],
+                capture_output=True,
+                text=True,
+            )
+            if result.returncode != 0:
+                return ""
+
+            kwargs = {}
+            if language:
+                kwargs["language"] = language
+
+            segments, info = model.transcribe(tmp.name, **kwargs)
+            text_parts = [seg.text for seg in segments]
+
+        return "".join(text_parts).strip()
 
 
 # Global service instance

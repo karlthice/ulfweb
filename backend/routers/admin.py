@@ -11,6 +11,7 @@ from fastapi import APIRouter, HTTPException
 from backend.config import settings
 from backend.models import AdminSettings, AdminSettingsUpdate, Server, ServerCreate, ServerUpdate
 from backend.services.llama_manager import llama_manager
+from backend.services.system_info import get_system_ram, get_gpu_vram, get_process_memory
 from backend.services.storage import (
     list_servers,
     get_server,
@@ -29,6 +30,51 @@ def _find_free_port() -> int:
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
         s.bind(("", 0))
         return s.getsockname()[1]
+
+
+@router.get("/system-info")
+async def system_info():
+    """Get system RAM, GPU VRAM, and per-model memory usage."""
+    ram = get_system_ram()
+    gpu = get_gpu_vram()
+
+    models = []
+    for server_id, proc in llama_manager.processes.items():
+        if proc.poll() is not None:
+            continue  # process has exited
+
+        server = await get_server(server_id)
+        if not server:
+            continue
+
+        mem = get_process_memory(proc.pid)
+        if mem is None:
+            continue
+
+        # Determine memory mode
+        has_vram = mem["vram_bytes"] > 0
+        has_gtt = mem["gtt_bytes"] > 0
+        if has_vram and has_gtt:
+            memory_mode = "vram_and_ram"
+        elif has_vram:
+            memory_mode = "vram_only"
+        else:
+            memory_mode = "ram_only"
+
+        model_file = server.model_path.rsplit("/", 1)[-1] if server.model_path else None
+
+        models.append({
+            "server_id": server_id,
+            "server_name": server.friendly_name,
+            "model_file": model_file,
+            "pid": proc.pid,
+            "ram_bytes": mem["ram_bytes"],
+            "vram_bytes": mem["vram_bytes"],
+            "gtt_bytes": mem["gtt_bytes"],
+            "memory_mode": memory_mode,
+        })
+
+    return {"ram": ram, "gpu": gpu, "models": models}
 
 
 @router.get("/models")

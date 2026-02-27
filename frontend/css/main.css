@@ -1707,6 +1707,14 @@ html, body {
     font-size: 0.9rem;
 }
 
+#audio-level {
+    width: 120px;
+    height: 20px;
+    border-radius: 4px;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border);
+}
+
 .recording-dot {
     width: 10px;
     height: 10px;
@@ -1754,4 +1762,59 @@ html, body {
     background: var(--bg-secondary);
     border-color: var(--accent);
     color: var(--accent);
+}
+
+/* Meeting Dictation */
+.meeting-btn {
+    background: #7c3aed;
+}
+
+.meeting-btn:hover:not(:disabled) {
+    background: #6d28d9;
+}
+
+.meeting-btn.recording {
+    background: var(--error);
+    animation: pulse 1.5s infinite;
+}
+
+.meeting-btn.recording:hover {
+    background: #dc2626;
+}
+
+.chunk-status {
+    font-size: 0.8rem;
+    color: var(--text-muted);
+}
+
+.meeting-progress {
+    padding: 0.5rem 0;
+}
+
+.meeting-progress .progress-bar {
+    height: 8px;
+    background: var(--border);
+    border-radius: 4px;
+    overflow: hidden;
+    margin-bottom: 0.5rem;
+}
+
+.meeting-progress .progress-fill {
+    height: 100%;
+    background: #7c3aed;
+    border-radius: 4px;
+    transition: width 0.3s;
+}
+
+.meeting-progress .progress-status {
+    font-size: 0.85rem;
+    color: var(--text-secondary);
+}
+
+#meeting-audio-level {
+    width: 120px;
+    height: 20px;
+    border-radius: 4px;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border);
 }
