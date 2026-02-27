@@ -251,6 +251,7 @@ class VaultCase(BaseModel):
     is_public: bool
     status: str
     ai_summary: str = ""
+    owner_ip: str = ""
     created_at: datetime
     updated_at: datetime
 
@@ -258,6 +259,7 @@ class VaultCase(BaseModel):
 class VaultCaseWithRecords(VaultCase):
     records: list["VaultRecord"] = []
     record_count: int = 0
+    current_user_id: int | None = None
 
 
 class VaultRecord(BaseModel):
@@ -272,6 +274,8 @@ class VaultRecord(BaseModel):
     ai_description: str | None = None
     starred: bool = False
     record_date: str
+    created_by_user_id: int | None = None
+    created_by_ip: str = ""
     created_at: datetime
 
 
@@ -280,3 +284,8 @@ class VaultRecordCreate(BaseModel):
     title: str = ""
     content: str | None = None
     record_date: str  # ISO date string YYYY-MM-DD
+
+
+class VaultRecordUpdate(BaseModel):
+    title: str | None = None
+    content: str | None = None

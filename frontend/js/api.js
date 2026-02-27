@@ -252,6 +252,19 @@ const api = {
         return response.json();
     },
 
+    async updateVaultRecord(recordId, updates) {
+        const response = await fetch(`${API_BASE}/vault/records/${recordId}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(updates)
+        });
+        if (!response.ok) {
+            const error = await response.json();
+            throw new Error(error.detail || 'Failed to update record');
+        }
+        return response.json();
+    },
+
     async deleteVaultRecord(recordId) {
         const response = await fetch(`${API_BASE}/vault/records/${recordId}`, {
             method: 'DELETE'

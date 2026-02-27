@@ -146,6 +146,7 @@ const vault = {
                 return;
             }
             this.currentCase = caseData;
+            this.currentUserId = caseData.current_user_id;
             this.showCaseDetail();
         } catch (error) {
             console.error('Failed to open case:', error);
@@ -188,6 +189,7 @@ const vault = {
                 <span class="vault-case-id">${this.escapeHtml(c.identifier)}</span>
                 <span class="vault-status-badge vault-status-${c.status}">${c.status}</span>
                 ${c.is_public ? '<span class="vault-public-badge">public</span>' : ''}
+                ${c.owner_ip ? `<span class="vault-owner-badge">Owner: ${this.escapeHtml(c.owner_ip)}</span>` : ''}
             </div>
             ${c.description ? `<p class="vault-detail-desc">${this.escapeHtml(c.description)}</p>` : ''}
             ${c.ai_summary ? `<div class="vault-case-summary"><strong>AI Summary</strong><p>${this.escapeHtml(c.ai_summary)}</p></div>` : ''}
@@ -259,6 +261,7 @@ const vault = {
                     <div class="vault-record-title">${this.escapeHtml(r.title || 'Untitled')}</div>
                     <div class="vault-record-meta">
                         ${this.formatDate(r.record_date)} &middot; ${r.record_type}
+                        ${r.created_by_ip ? ` &middot; ${this.escapeHtml(r.created_by_ip)}` : ''}
                         ${r.original_filename ? ` &middot; ${this.escapeHtml(r.original_filename)}` : ''}
                         ${r.file_size ? ` (${this.formatSize(r.file_size)})` : ''}
                     </div>
@@ -276,6 +279,7 @@ const vault = {
                     ` : ''}
                 </div>
                 <div class="vault-record-actions">
+                    ${this.isEditableRecord(r) ? `<button class="vault-btn vault-btn-small vault-edit-record" data-id="${r.id}">Edit</button>` : ''}
                     ${r.filename ? `<a href="${api.getVaultRecordFileUrl(r.id)}" class="vault-btn vault-btn-small" download>Download</a>` : ''}
                     <button class="vault-btn vault-btn-small vault-btn-danger vault-delete-record" data-id="${r.id}">Delete</button>
                 </div>
@@ -287,6 +291,14 @@ const vault = {
             btn.addEventListener('click', async (e) => {
                 e.stopPropagation();
                 await this.toggleStar(parseInt(btn.dataset.id));
+            });
+        });
+
+        // Edit handlers
+        container.querySelectorAll('.vault-edit-record').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                this.showEditForm(parseInt(btn.dataset.id));
             });
         });
 
@@ -421,6 +433,7 @@ const vault = {
             // Reload case to get updated records
             const caseData = await api.getVaultCase(this.currentCase.id);
             this.currentCase = caseData;
+            this.currentUserId = caseData.current_user_id;
 
             const form = document.getElementById('vault-add-record-form');
             if (form) form.remove();
@@ -459,6 +472,54 @@ const vault = {
         } catch (error) {
             alert('Failed to delete record: ' + error.message);
         }
+    },
+
+    isEditableRecord(record) {
+        if (record.record_type !== 'text') return false;
+        if (record.created_by_user_id !== this.currentUserId) return false;
+        const created = new Date(record.created_at);
+        const now = new Date();
+        const hoursDiff = (now - created) / (1000 * 60 * 60);
+        return hoursDiff <= 24;
+    },
+
+    showEditForm(recordId) {
+        const record = this.currentCase.records.find(r => r.id === recordId);
+        if (!record) return;
+
+        const recordEl = document.querySelector(`.vault-record-item[data-id="${recordId}"]`);
+        if (!recordEl) return;
+
+        const infoEl = recordEl.querySelector('.vault-record-info');
+        const actionsEl = recordEl.querySelector('.vault-record-actions');
+
+        infoEl.innerHTML = `
+            <input type="text" class="vault-edit-title" value="${this.escapeHtml(record.title || '')}" placeholder="Record title">
+            <textarea class="vault-edit-content" rows="4" placeholder="Record content">${this.escapeHtml(record.content || '')}</textarea>
+            <div class="vault-form-actions">
+                <button class="vault-btn vault-btn-secondary vault-edit-cancel">Cancel</button>
+                <button class="vault-btn vault-btn-primary vault-edit-save">Save</button>
+            </div>
+        `;
+        actionsEl.classList.add('hidden');
+
+        infoEl.querySelector('.vault-edit-cancel').addEventListener('click', () => this.renderRecordList());
+        infoEl.querySelector('.vault-edit-save').addEventListener('click', async () => {
+            const title = infoEl.querySelector('.vault-edit-title').value.trim();
+            const content = infoEl.querySelector('.vault-edit-content').value.trim();
+            try {
+                const updated = await api.updateVaultRecord(recordId, { title, content });
+                const idx = this.currentCase.records.findIndex(r => r.id === recordId);
+                if (idx !== -1) {
+                    this.currentCase.records[idx] = updated;
+                }
+                this.renderRecordList();
+            } catch (error) {
+                alert('Failed to update record: ' + error.message);
+            }
+        });
+
+        infoEl.querySelector('.vault-edit-title').focus();
     },
 
     // Utility methods

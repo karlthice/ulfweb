@@ -799,11 +799,13 @@ async def list_vault_cases(user_id: int) -> list[VaultCase]:
     """List cases accessible to user (own private + all public)."""
     async with get_db() as db:
         cursor = await db.execute(
-            """SELECT id, user_id, identifier, name, description, is_public, status,
-                      ai_summary, created_at, updated_at
-               FROM vault_cases
-               WHERE user_id = ? OR is_public = 1
-               ORDER BY updated_at DESC""",
+            """SELECT vc.id, vc.user_id, vc.identifier, vc.name, vc.description,
+                      vc.is_public, vc.status, vc.ai_summary, vc.created_at, vc.updated_at,
+                      u.ip_address as owner_ip
+               FROM vault_cases vc
+               JOIN users u ON u.id = vc.user_id
+               WHERE vc.user_id = ? OR vc.is_public = 1
+               ORDER BY vc.updated_at DESC""",
             (user_id,)
         )
         rows = await cursor.fetchall()
@@ -812,7 +814,8 @@ async def list_vault_cases(user_id: int) -> list[VaultCase]:
 
 async def create_vault_case(
     user_id: int, identifier: str, name: str,
-    description: str = "", is_public: bool = False
+    description: str = "", is_public: bool = False,
+    owner_ip: str = ""
 ) -> VaultCase:
     """Create a new vault case."""
     async with get_db() as db:
@@ -826,7 +829,7 @@ async def create_vault_case(
         return VaultCase(
             id=cursor.lastrowid, user_id=user_id, identifier=identifier,
             name=name, description=description, is_public=is_public,
-            status="active", created_at=now, updated_at=now
+            status="active", owner_ip=owner_ip, created_at=now, updated_at=now
         )
 
 
@@ -834,10 +837,12 @@ async def get_vault_case(case_id: int, user_id: int) -> VaultCaseWithRecords | N
     """Get a case with records if accessible to user."""
     async with get_db() as db:
         cursor = await db.execute(
-            """SELECT id, user_id, identifier, name, description, is_public, status,
-                      ai_summary, created_at, updated_at
-               FROM vault_cases
-               WHERE id = ? AND (user_id = ? OR is_public = 1)""",
+            """SELECT vc.id, vc.user_id, vc.identifier, vc.name, vc.description,
+                      vc.is_public, vc.status, vc.ai_summary, vc.created_at, vc.updated_at,
+                      u.ip_address as owner_ip
+               FROM vault_cases vc
+               JOIN users u ON u.id = vc.user_id
+               WHERE vc.id = ? AND (vc.user_id = ? OR vc.is_public = 1)""",
             (case_id, user_id)
         )
         row = await cursor.fetchone()
@@ -847,11 +852,14 @@ async def get_vault_case(case_id: int, user_id: int) -> VaultCaseWithRecords | N
         case = VaultCaseWithRecords(**dict(row))
 
         cursor = await db.execute(
-            """SELECT id, case_id, record_type, title, content, filename, original_filename,
-                      file_size, ai_description, starred, record_date, created_at
-               FROM vault_records
-               WHERE case_id = ?
-               ORDER BY record_date DESC, created_at DESC""",
+            """SELECT r.id, r.case_id, r.record_type, r.title, r.content, r.filename,
+                      r.original_filename, r.file_size, r.ai_description, r.starred,
+                      r.record_date, r.created_by_user_id, r.created_at,
+                      COALESCE(cu.ip_address, '') as created_by_ip
+               FROM vault_records r
+               LEFT JOIN users cu ON cu.id = r.created_by_user_id
+               WHERE r.case_id = ?
+               ORDER BY r.record_date DESC, r.created_at DESC""",
             (case_id,)
         )
         records = await cursor.fetchall()
@@ -888,9 +896,12 @@ async def update_vault_case(case_id: int, user_id: int, updates: dict[str, Any])
             return None
 
         cursor = await db.execute(
-            """SELECT id, user_id, identifier, name, description, is_public, status,
-                      ai_summary, created_at, updated_at
-               FROM vault_cases WHERE id = ?""",
+            """SELECT vc.id, vc.user_id, vc.identifier, vc.name, vc.description,
+                      vc.is_public, vc.status, vc.ai_summary, vc.created_at, vc.updated_at,
+                      u.ip_address as owner_ip
+               FROM vault_cases vc
+               JOIN users u ON u.id = vc.user_id
+               WHERE vc.id = ?""",
             (case_id,)
         )
         row = await cursor.fetchone()
@@ -913,12 +924,14 @@ async def search_vault_cases(user_id: int, query: str) -> list[VaultCase]:
     async with get_db() as db:
         pattern = f"%{query}%"
         cursor = await db.execute(
-            """SELECT id, user_id, identifier, name, description, is_public, status,
-                      ai_summary, created_at, updated_at
-               FROM vault_cases
-               WHERE (user_id = ? OR is_public = 1)
-                 AND (name LIKE ? OR identifier LIKE ?)
-               ORDER BY updated_at DESC
+            """SELECT vc.id, vc.user_id, vc.identifier, vc.name, vc.description,
+                      vc.is_public, vc.status, vc.ai_summary, vc.created_at, vc.updated_at,
+                      u.ip_address as owner_ip
+               FROM vault_cases vc
+               JOIN users u ON u.id = vc.user_id
+               WHERE (vc.user_id = ? OR vc.is_public = 1)
+                 AND (vc.name LIKE ? OR vc.identifier LIKE ?)
+               ORDER BY vc.updated_at DESC
                LIMIT 20""",
             (user_id, pattern, pattern)
         )
@@ -930,7 +943,8 @@ async def search_vault_cases(user_id: int, query: str) -> list[VaultCase]:
 async def create_vault_record(
     case_id: int, record_type: str, title: str, record_date: str,
     content: str | None = None, filename: str | None = None,
-    original_filename: str | None = None, file_size: int | None = None
+    original_filename: str | None = None, file_size: int | None = None,
+    created_by_user_id: int | None = None, created_by_ip: str = ""
 ) -> VaultRecord:
     """Create a new vault record."""
     async with get_db() as db:
@@ -938,10 +952,10 @@ async def create_vault_record(
         cursor = await db.execute(
             """INSERT INTO vault_records
                (case_id, record_type, title, content, filename, original_filename,
-                file_size, record_date, created_at)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                file_size, record_date, created_by_user_id, created_at)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
             (case_id, record_type, title, content, filename,
-             original_filename, file_size, record_date, now)
+             original_filename, file_size, record_date, created_by_user_id, now)
         )
         await db.commit()
 
@@ -957,6 +971,7 @@ async def create_vault_record(
             title=title, content=content, filename=filename,
             original_filename=original_filename, file_size=file_size,
             ai_description=None, starred=False, record_date=record_date,
+            created_by_user_id=created_by_user_id, created_by_ip=created_by_ip,
             created_at=now
         )
 
@@ -980,9 +995,13 @@ async def toggle_vault_record_star(record_id: int) -> VaultRecord | None:
         await db.commit()
 
         cursor = await db.execute(
-            """SELECT id, case_id, record_type, title, content, filename, original_filename,
-                      file_size, ai_description, starred, record_date, created_at
-               FROM vault_records WHERE id = ?""",
+            """SELECT r.id, r.case_id, r.record_type, r.title, r.content, r.filename,
+                      r.original_filename, r.file_size, r.ai_description, r.starred,
+                      r.record_date, r.created_by_user_id, r.created_at,
+                      COALESCE(cu.ip_address, '') as created_by_ip
+               FROM vault_records r
+               LEFT JOIN users cu ON cu.id = r.created_by_user_id
+               WHERE r.id = ?""",
             (record_id,)
         )
         row = await cursor.fetchone()
@@ -1122,10 +1141,36 @@ async def get_vault_record(record_id: int) -> VaultRecord | None:
     """Get a single vault record by ID."""
     async with get_db() as db:
         cursor = await db.execute(
-            """SELECT id, case_id, record_type, title, content, filename, original_filename,
-                      file_size, ai_description, starred, record_date, created_at
-               FROM vault_records WHERE id = ?""",
+            """SELECT r.id, r.case_id, r.record_type, r.title, r.content, r.filename,
+                      r.original_filename, r.file_size, r.ai_description, r.starred,
+                      r.record_date, r.created_by_user_id, r.created_at,
+                      COALESCE(cu.ip_address, '') as created_by_ip
+               FROM vault_records r
+               LEFT JOIN users cu ON cu.id = r.created_by_user_id
+               WHERE r.id = ?""",
             (record_id,)
         )
         row = await cursor.fetchone()
         return VaultRecord(**dict(row)) if row else None
+
+
+async def update_vault_record(record_id: int, updates: dict) -> VaultRecord | None:
+    """Update a vault record's title and/or content."""
+    async with get_db() as db:
+        set_clauses = []
+        values = []
+        for key in ("title", "content"):
+            if key in updates and updates[key] is not None:
+                set_clauses.append(f"{key} = ?")
+                values.append(updates[key])
+
+        if not set_clauses:
+            return await get_vault_record(record_id)
+
+        values.append(record_id)
+        await db.execute(
+            f"UPDATE vault_records SET {', '.join(set_clauses)} WHERE id = ?",
+            values
+        )
+        await db.commit()
+        return await get_vault_record(record_id)

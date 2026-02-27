@@ -13,6 +13,7 @@ from backend.models import (
     VaultCaseUpdate,
     VaultCaseWithRecords,
     VaultRecord,
+    VaultRecordUpdate,
 )
 from backend.services import storage
 
@@ -50,6 +51,7 @@ async def create_case(data: VaultCaseCreate, request: Request):
         name=data.name,
         description=data.description,
         is_public=data.is_public,
+        owner_ip=ip,
     )
 
 
@@ -69,6 +71,7 @@ async def get_case(case_id: int, request: Request):
     case = await storage.get_vault_case(case_id, user_id)
     if not case:
         raise HTTPException(status_code=404, detail="Case not found")
+    case.current_user_id = user_id
     return case
 
 
@@ -121,13 +124,10 @@ async def add_record(
     ip = get_client_ip(request)
     user_id = await storage.get_or_create_user(ip)
 
-    # Verify case access
+    # Verify case access (any viewer can add records)
     case = await storage.get_vault_case(case_id, user_id)
     if not case:
         raise HTTPException(status_code=404, detail="Case not found")
-    # Only owner can add records
-    if case.user_id != user_id:
-        raise HTTPException(status_code=403, detail="Only the case owner can add records")
 
     filename = None
     original_filename = None
@@ -152,6 +152,8 @@ async def add_record(
         filename=filename,
         original_filename=original_filename,
         file_size=file_size,
+        created_by_user_id=user_id,
+        created_by_ip=ip,
     )
 
     # Generate AI description for documents/images in background
@@ -176,12 +178,12 @@ async def toggle_star(record_id: int, request: Request):
     ip = get_client_ip(request)
     user_id = await storage.get_or_create_user(ip)
 
-    # Verify access via the record's case
+    # Verify access via the record's case (any viewer can toggle stars)
     record = await storage.get_vault_record(record_id)
     if not record:
         raise HTTPException(status_code=404, detail="Record not found")
     case = await storage.get_vault_case(record.case_id, user_id)
-    if not case or case.user_id != user_id:
+    if not case:
         raise HTTPException(status_code=403, detail="Not authorized")
 
     updated = await storage.toggle_vault_record_star(record_id)
@@ -201,7 +203,10 @@ async def delete_record(record_id: int, request: Request, background_tasks: Back
         raise HTTPException(status_code=404, detail="Record not found")
 
     case = await storage.get_vault_case(record.case_id, user_id)
-    if not case or case.user_id != user_id:
+    if not case:
+        raise HTTPException(status_code=403, detail="Not authorized")
+    # Allow case owner or record creator to delete
+    if case.user_id != user_id and record.created_by_user_id != user_id:
         raise HTTPException(status_code=403, detail="Not authorized")
 
     case_id = record.case_id
@@ -220,6 +225,46 @@ async def delete_record(record_id: int, request: Request, background_tasks: Back
     background_tasks.add_task(generate_case_ai_summary, case_id)
 
     return {"status": "deleted"}
+
+
+@router.put("/records/{record_id}", response_model=VaultRecord)
+async def update_record(record_id: int, data: VaultRecordUpdate, request: Request):
+    """Edit a text record (creator only, within 24 hours)."""
+    from datetime import datetime, timedelta
+
+    ip = get_client_ip(request)
+    user_id = await storage.get_or_create_user(ip)
+
+    record = await storage.get_vault_record(record_id)
+    if not record:
+        raise HTTPException(status_code=404, detail="Record not found")
+
+    # Verify user can view the case
+    case = await storage.get_vault_case(record.case_id, user_id)
+    if not case:
+        raise HTTPException(status_code=403, detail="Not authorized")
+
+    # Only text records can be edited
+    if record.record_type != "text":
+        raise HTTPException(status_code=403, detail="Only text records can be edited")
+
+    # Only the creator can edit
+    if record.created_by_user_id != user_id:
+        raise HTTPException(status_code=403, detail="Only the record creator can edit")
+
+    # Must be within 24 hours of creation
+    age = datetime.utcnow() - record.created_at
+    if age > timedelta(hours=24):
+        raise HTTPException(status_code=403, detail="Records can only be edited within 24 hours of creation")
+
+    updates = data.model_dump(exclude_unset=True)
+    if not updates:
+        return record
+
+    updated = await storage.update_vault_record(record_id, updates)
+    if not updated:
+        raise HTTPException(status_code=404, detail="Record not found")
+    return updated
 
 
 @router.get("/records/{record_id}/file")

@@ -185,6 +185,7 @@ CREATE TABLE IF NOT EXISTS vault_cases (
 CREATE TABLE IF NOT EXISTS vault_records (
     id INTEGER PRIMARY KEY,
     case_id INTEGER NOT NULL,
+    created_by_user_id INTEGER,
     record_type TEXT NOT NULL CHECK(record_type IN ('text', 'document', 'image')),
     title TEXT DEFAULT '',
     content TEXT,
@@ -195,7 +196,8 @@ CREATE TABLE IF NOT EXISTS vault_records (
     starred INTEGER DEFAULT 0,
     record_date DATE NOT NULL,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (case_id) REFERENCES vault_cases(id) ON DELETE CASCADE
+    FOREIGN KEY (case_id) REFERENCES vault_cases(id) ON DELETE CASCADE,
+    FOREIGN KEY (created_by_user_id) REFERENCES users(id)
 );
 
 -- Indexes for document-related queries
@@ -357,6 +359,21 @@ async def init_database() -> None:
         if "ai_summary" not in vault_columns:
             await db.execute(
                 "ALTER TABLE vault_cases ADD COLUMN ai_summary TEXT DEFAULT ''"
+            )
+            await db.commit()
+
+        # Migration: Add created_by_user_id to vault_records
+        cursor = await db.execute("PRAGMA table_info(vault_records)")
+        vr_columns = [row[1] for row in await cursor.fetchall()]
+        if "created_by_user_id" not in vr_columns:
+            await db.execute(
+                "ALTER TABLE vault_records ADD COLUMN created_by_user_id INTEGER"
+            )
+            # Backfill: set created_by_user_id to the case owner for existing records
+            await db.execute(
+                """UPDATE vault_records SET created_by_user_id = (
+                       SELECT user_id FROM vault_cases WHERE vault_cases.id = vault_records.case_id
+                   )"""
             )
             await db.commit()
 
