@@ -21,6 +21,7 @@ let currentMode = 'chat';
     documents.init();
     dictation.init();
     meeting.init();
+    vault.init();
 
     console.log('ulfweb initialized');
 })();
@@ -33,10 +34,12 @@ function setupModeTabs() {
     const translateTab = document.getElementById('translate-tab');
     const documentsTab = document.getElementById('documents-tab');
     const dictationTab = document.getElementById('dictation-tab');
+    const vaultTab = document.getElementById('vault-tab');
     const chatPanel = document.getElementById('chat-panel');
     const translatePanel = document.getElementById('translate-panel');
     const documentsPanel = document.getElementById('documents-panel');
     const dictationPanel = document.getElementById('dictation-panel');
+    const vaultPanel = document.getElementById('vault-panel');
     const newChatBtn = document.getElementById('new-chat-btn');
     const conversationsList = document.getElementById('conversations-list');
 
@@ -48,16 +51,23 @@ function setupModeTabs() {
         translateTab.classList.toggle('active', mode === 'translate');
         documentsTab.classList.toggle('active', mode === 'documents');
         dictationTab.classList.toggle('active', mode === 'dictation');
+        vaultTab.classList.toggle('active', mode === 'vault');
 
         // Show/hide panels
         chatPanel.classList.toggle('hidden', mode !== 'chat');
         translatePanel.classList.toggle('hidden', mode !== 'translate');
         documentsPanel.classList.toggle('hidden', mode !== 'documents');
         dictationPanel.classList.toggle('hidden', mode !== 'dictation');
+        vaultPanel.classList.toggle('hidden', mode !== 'vault');
 
         // Show/hide chat-specific sidebar elements
         newChatBtn.classList.toggle('hidden', mode !== 'chat');
         conversationsList.classList.toggle('hidden', mode !== 'chat');
+
+        // Load vault data when switching to vault tab
+        if (mode === 'vault') {
+            vault.loadCases();
+        }
     }
 
     chatTab.addEventListener('click', () => {
@@ -74,6 +84,10 @@ function setupModeTabs() {
 
     dictationTab.addEventListener('click', () => {
         if (currentMode !== 'dictation') setActiveTab('dictation');
+    });
+
+    vaultTab.addEventListener('click', () => {
+        if (currentMode !== 'vault') setActiveTab('vault');
     });
 }
 

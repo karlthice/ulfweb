@@ -85,6 +85,14 @@ const admin = {
             this.saveDocumentAiSetting('translation_server_id', e.target.value);
         });
 
+        // Vault server dropdowns
+        document.getElementById('vault-image-server').addEventListener('change', (e) => {
+            this.saveDocumentAiSetting('vault_image_server_id', e.target.value);
+        });
+        document.getElementById('vault-text-server').addEventListener('change', (e) => {
+            this.saveDocumentAiSetting('vault_text_server_id', e.target.value);
+        });
+
         // Skip contextual retrieval checkbox
         document.getElementById('skip-contextual-retrieval').addEventListener('change', (e) => {
             this.saveDocumentAiSetting('skip_contextual_retrieval', e.target.checked);
@@ -759,7 +767,9 @@ const admin = {
             { id: 'document-ai-query-server', setting: 'document_ai_query_server_id' },
             { id: 'document-ai-extraction-server', setting: 'document_ai_extraction_server_id' },
             { id: 'document-ai-understanding-server', setting: 'document_ai_understanding_server_id' },
-            { id: 'translation-server', setting: 'translation_server_id' }
+            { id: 'translation-server', setting: 'translation_server_id' },
+            { id: 'vault-image-server', setting: 'vault_image_server_id' },
+            { id: 'vault-text-server', setting: 'vault_text_server_id' }
         ];
 
         // Only show active servers in Document AI dropdowns

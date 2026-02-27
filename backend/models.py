@@ -84,6 +84,7 @@ class ModelListResponse(BaseModel):
 class ChatRequest(BaseModel):
     content: str
     image: str | None = None  # Optional base64-encoded image for vision models
+    case_refs: list[int] | None = None  # Optional vault case IDs for @Case context injection
 
 
 class ChatChunk(BaseModel):
@@ -208,6 +209,8 @@ class AdminSettings(BaseModel):
     translation_server_id: int | None = None
     skip_contextual_retrieval: bool = False
     whisper_model: str = "large-v3-turbo"
+    vault_image_server_id: int | None = None
+    vault_text_server_id: int | None = None
 
 
 class AdminSettingsUpdate(BaseModel):
@@ -217,3 +220,60 @@ class AdminSettingsUpdate(BaseModel):
     translation_server_id: int | None = None
     skip_contextual_retrieval: bool | None = None
     whisper_model: str | None = None
+    vault_image_server_id: int | None = None
+    vault_text_server_id: int | None = None
+
+
+# Vault models
+class VaultCaseCreate(BaseModel):
+    identifier: str
+    name: str
+    description: str = ""
+    is_public: bool = False
+
+
+class VaultCaseUpdate(BaseModel):
+    identifier: str | None = None
+    name: str | None = None
+    description: str | None = None
+    is_public: bool | None = None
+    status: Literal["active", "closed", "archived"] | None = None
+
+
+class VaultCase(BaseModel):
+    id: int
+    user_id: int
+    identifier: str
+    name: str
+    description: str
+    is_public: bool
+    status: str
+    created_at: datetime
+    updated_at: datetime
+
+
+class VaultCaseWithRecords(VaultCase):
+    records: list["VaultRecord"] = []
+    record_count: int = 0
+
+
+class VaultRecord(BaseModel):
+    id: int
+    case_id: int
+    record_type: str
+    title: str
+    content: str | None = None
+    filename: str | None = None
+    original_filename: str | None = None
+    file_size: int | None = None
+    ai_description: str | None = None
+    starred: bool = False
+    record_date: str
+    created_at: datetime
+
+
+class VaultRecordCreate(BaseModel):
+    record_type: Literal["text", "document", "image"] = "text"
+    title: str = ""
+    content: str | None = None
+    record_date: str  # ISO date string YYYY-MM-DD

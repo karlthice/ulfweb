@@ -11,6 +11,7 @@ const chat = {
     attachedPdfName: null,
     attachedImageBase64: null,
     attachedImageName: null,
+    caseRefs: [],  // Resolved case IDs for @mentions
     MAX_PDF_SIZE: 10 * 1024 * 1024, // 10MB
     MAX_IMAGE_SIZE: 20 * 1024 * 1024, // 20MB
     MAX_TEXT_LENGTH: 50000, // Max characters to include
@@ -25,6 +26,7 @@ const chat = {
         this.setupServerSelector();
         this.setupAttachment();
         this.setupImageAttachment();
+        this.setupMentionAutocomplete();
         this.loadServers();
     },
 
@@ -341,6 +343,140 @@ const chat = {
     },
 
     /**
+     * Setup @mention autocomplete for vault cases
+     */
+    setupMentionAutocomplete() {
+        const input = document.getElementById('message-input');
+
+        // Create dropdown element
+        const dropdown = document.createElement('div');
+        dropdown.id = 'mention-dropdown';
+        dropdown.className = 'mention-dropdown hidden';
+        input.parentElement.appendChild(dropdown);
+
+        let mentionStart = -1;
+        let searchTimeout = null;
+
+        input.addEventListener('input', () => {
+            const value = input.value;
+            const cursorPos = input.selectionStart;
+
+            // Find @ before cursor
+            const before = value.substring(0, cursorPos);
+            const atIndex = before.lastIndexOf('@');
+
+            if (atIndex >= 0 && (atIndex === 0 || before[atIndex - 1] === ' ' || before[atIndex - 1] === '\n')) {
+                const query = before.substring(atIndex + 1);
+                // Don't search if there's a space after the query (mention already completed)
+                if (query.length > 0 && !query.includes('\n')) {
+                    mentionStart = atIndex;
+                    clearTimeout(searchTimeout);
+                    searchTimeout = setTimeout(() => this.searchMentions(query, dropdown), 200);
+                    return;
+                }
+            }
+
+            this.hideMentionDropdown(dropdown);
+        });
+
+        input.addEventListener('keydown', (e) => {
+            if (dropdown.classList.contains('hidden')) return;
+
+            const items = dropdown.querySelectorAll('.mention-item');
+            const active = dropdown.querySelector('.mention-item.active');
+
+            if (e.key === 'ArrowDown') {
+                e.preventDefault();
+                if (active) {
+                    active.classList.remove('active');
+                    const next = active.nextElementSibling || items[0];
+                    next.classList.add('active');
+                } else if (items.length) {
+                    items[0].classList.add('active');
+                }
+            } else if (e.key === 'ArrowUp') {
+                e.preventDefault();
+                if (active) {
+                    active.classList.remove('active');
+                    const prev = active.previousElementSibling || items[items.length - 1];
+                    prev.classList.add('active');
+                }
+            } else if (e.key === 'Enter' && active) {
+                e.preventDefault();
+                this.insertMention(input, mentionStart, active.dataset.id, active.dataset.name, dropdown);
+            } else if (e.key === 'Escape') {
+                this.hideMentionDropdown(dropdown);
+            }
+        });
+
+        // Close dropdown on click outside
+        document.addEventListener('click', (e) => {
+            if (!dropdown.contains(e.target) && e.target !== input) {
+                this.hideMentionDropdown(dropdown);
+            }
+        });
+    },
+
+    async searchMentions(query, dropdown) {
+        try {
+            const cases = await api.searchVaultCases(query);
+            if (cases.length === 0) {
+                this.hideMentionDropdown(dropdown);
+                return;
+            }
+
+            dropdown.innerHTML = cases.slice(0, 8).map((c, i) => `
+                <div class="mention-item ${i === 0 ? 'active' : ''}" data-id="${c.id}" data-name="${c.name}">
+                    <span class="mention-name">${this.escapeHtml(c.name)}</span>
+                    <span class="mention-id">${this.escapeHtml(c.identifier)}</span>
+                </div>
+            `).join('');
+
+            dropdown.classList.remove('hidden');
+
+            // Click handler for items
+            dropdown.querySelectorAll('.mention-item').forEach(item => {
+                item.addEventListener('click', () => {
+                    const input = document.getElementById('message-input');
+                    const before = input.value.substring(0, input.selectionStart);
+                    const atIndex = before.lastIndexOf('@');
+                    this.insertMention(input, atIndex, item.dataset.id, item.dataset.name, dropdown);
+                });
+            });
+        } catch (error) {
+            console.error('Mention search failed:', error);
+            this.hideMentionDropdown(dropdown);
+        }
+    },
+
+    insertMention(input, mentionStart, caseId, caseName, dropdown) {
+        const before = input.value.substring(0, mentionStart);
+        const after = input.value.substring(input.selectionStart);
+        const mention = `@${caseName} `;
+        input.value = before + mention + after;
+        input.selectionStart = input.selectionEnd = mentionStart + mention.length;
+        input.focus();
+
+        // Track the case reference
+        const id = parseInt(caseId);
+        if (!this.caseRefs.includes(id)) {
+            this.caseRefs.push(id);
+        }
+
+        this.hideMentionDropdown(dropdown);
+    },
+
+    hideMentionDropdown(dropdown) {
+        dropdown.classList.add('hidden');
+    },
+
+    escapeHtml(text) {
+        const div = document.createElement('div');
+        div.textContent = text;
+        return div.innerHTML;
+    },
+
+    /**
      * Configure marked for markdown rendering
      */
     setupMarked() {
@@ -549,6 +685,10 @@ const chat = {
         }
         this.messages.push({ role: 'user', content: displayContent });
 
+        // Capture and clear case refs
+        const currentCaseRefs = this.caseRefs.length > 0 ? [...this.caseRefs] : null;
+        this.caseRefs = [];
+
         // Start streaming
         this.startStreaming();
 
@@ -626,7 +766,8 @@ const chat = {
                 tokensCounter.textContent = '';
                 this.stopStreaming();
             },
-            imageBase64
+            imageBase64,
+            currentCaseRefs
         );
     },
 

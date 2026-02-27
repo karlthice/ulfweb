@@ -176,5 +176,99 @@ const api = {
             throw new Error(error.detail || 'Failed to delete collection');
         }
         return true;
+    },
+
+    // Vault API methods
+
+    async listVaultCases() {
+        const response = await fetch(`${API_BASE}/vault/cases`);
+        if (!response.ok) throw new Error('Failed to fetch cases');
+        return response.json();
+    },
+
+    async createVaultCase(data) {
+        const response = await fetch(`${API_BASE}/vault/cases`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(data)
+        });
+        if (!response.ok) {
+            const error = await response.json();
+            throw new Error(error.detail || 'Failed to create case');
+        }
+        return response.json();
+    },
+
+    async getVaultCase(id) {
+        const response = await fetch(`${API_BASE}/vault/cases/${id}`);
+        if (!response.ok) {
+            if (response.status === 404) return null;
+            throw new Error('Failed to fetch case');
+        }
+        return response.json();
+    },
+
+    async updateVaultCase(id, updates) {
+        const response = await fetch(`${API_BASE}/vault/cases/${id}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(updates)
+        });
+        if (!response.ok) throw new Error('Failed to update case');
+        return response.json();
+    },
+
+    async deleteVaultCase(id) {
+        const response = await fetch(`${API_BASE}/vault/cases/${id}`, {
+            method: 'DELETE'
+        });
+        if (!response.ok) throw new Error('Failed to delete case');
+        return true;
+    },
+
+    async searchVaultCases(query) {
+        const response = await fetch(`${API_BASE}/vault/cases/search?q=${encodeURIComponent(query)}`);
+        if (!response.ok) throw new Error('Failed to search cases');
+        return response.json();
+    },
+
+    async addVaultRecord(caseId, formData) {
+        const response = await fetch(`${API_BASE}/vault/cases/${caseId}/records`, {
+            method: 'POST',
+            body: formData
+        });
+        if (!response.ok) {
+            const error = await response.json();
+            throw new Error(error.detail || 'Failed to add record');
+        }
+        return response.json();
+    },
+
+    async toggleVaultRecordStar(recordId) {
+        const response = await fetch(`${API_BASE}/vault/records/${recordId}/star`, {
+            method: 'PUT'
+        });
+        if (!response.ok) throw new Error('Failed to toggle star');
+        return response.json();
+    },
+
+    async deleteVaultRecord(recordId) {
+        const response = await fetch(`${API_BASE}/vault/records/${recordId}`, {
+            method: 'DELETE'
+        });
+        if (!response.ok) throw new Error('Failed to delete record');
+        return true;
+    },
+
+    async searchVaultRecords(query, caseId = null) {
+        let url = `${API_BASE}/vault/records/search?q=${encodeURIComponent(query)}`;
+        if (caseId) url += `&case_id=${caseId}`;
+        const response = await fetch(url);
+        if (!response.ok) throw new Error('Failed to search records');
+        return response.json();
+    },
+
+    getVaultRecordFileUrl(recordId) {
+        return `${API_BASE}/vault/records/${recordId}/file`;
     }
 };

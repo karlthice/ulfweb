@@ -165,12 +165,49 @@ CREATE TABLE IF NOT EXISTS admin_settings (
 -- Ensure admin_settings row exists
 INSERT OR IGNORE INTO admin_settings (id) VALUES (1);
 
+-- Vault cases
+CREATE TABLE IF NOT EXISTS vault_cases (
+    id INTEGER PRIMARY KEY,
+    user_id INTEGER NOT NULL,
+    identifier TEXT NOT NULL,
+    name TEXT NOT NULL,
+    description TEXT DEFAULT '',
+    is_public INTEGER DEFAULT 0,
+    status TEXT DEFAULT 'active' CHECK(status IN ('active', 'closed', 'archived')),
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (user_id) REFERENCES users(id)
+);
+
+-- Vault records
+CREATE TABLE IF NOT EXISTS vault_records (
+    id INTEGER PRIMARY KEY,
+    case_id INTEGER NOT NULL,
+    record_type TEXT NOT NULL CHECK(record_type IN ('text', 'document', 'image')),
+    title TEXT DEFAULT '',
+    content TEXT,
+    filename TEXT,
+    original_filename TEXT,
+    file_size INTEGER,
+    ai_description TEXT,
+    starred INTEGER DEFAULT 0,
+    record_date DATE NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (case_id) REFERENCES vault_cases(id) ON DELETE CASCADE
+);
+
 -- Indexes for document-related queries
 CREATE INDEX IF NOT EXISTS idx_documents_collection_id ON documents(collection_id);
 CREATE INDEX IF NOT EXISTS idx_document_chunks_document_id ON document_chunks(document_id);
 CREATE INDEX IF NOT EXISTS idx_entities_collection_id ON entities(collection_id);
 CREATE INDEX IF NOT EXISTS idx_entities_document_id ON entities(document_id);
 CREATE INDEX IF NOT EXISTS idx_relations_collection_id ON relations(collection_id);
+
+-- Vault indexes
+CREATE INDEX IF NOT EXISTS idx_vault_cases_user_id ON vault_cases(user_id);
+CREATE INDEX IF NOT EXISTS idx_vault_cases_public ON vault_cases(is_public);
+CREATE INDEX IF NOT EXISTS idx_vault_records_case_id ON vault_records(case_id);
+CREATE INDEX IF NOT EXISTS idx_vault_records_starred ON vault_records(starred);
 """
 
 
@@ -286,6 +323,20 @@ async def init_database() -> None:
         if "whisper_model" not in admin_columns:
             await db.execute(
                 "ALTER TABLE admin_settings ADD COLUMN whisper_model TEXT DEFAULT 'large-v3-turbo'"
+            )
+            await db.commit()
+
+        # Migration: Add vault server settings to admin_settings
+        cursor = await db.execute("PRAGMA table_info(admin_settings)")
+        admin_columns = [row[1] for row in await cursor.fetchall()]
+        if "vault_image_server_id" not in admin_columns:
+            await db.execute(
+                "ALTER TABLE admin_settings ADD COLUMN vault_image_server_id INTEGER"
+            )
+            await db.commit()
+        if "vault_text_server_id" not in admin_columns:
+            await db.execute(
+                "ALTER TABLE admin_settings ADD COLUMN vault_text_server_id INTEGER"
             )
             await db.commit()
 

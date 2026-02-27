@@ -16,6 +16,7 @@ from backend.services.storage import (
     get_or_create_user,
     get_server,
     get_user_settings,
+    get_vault_case_context,
     list_servers,
     touch_conversation,
     update_conversation,
@@ -36,7 +37,8 @@ async def stream_chat_response(
     conversation_id: int,
     user_id: int,
     user_message: str,
-    image_base64: str | None = None
+    image_base64: str | None = None,
+    case_refs: list[int] | None = None,
 ) -> AsyncGenerator[str, None]:
     """Stream chat response from llama.cpp server."""
     # Save user message
@@ -55,6 +57,19 @@ async def stream_chat_response(
             "role": "system",
             "content": user_settings.system_prompt
         })
+
+    # Inject vault case context if @Case references present
+    if case_refs:
+        case_contexts = []
+        for case_id in case_refs:
+            ctx = await get_vault_case_context(case_id, user_id)
+            if ctx:
+                case_contexts.append(ctx)
+        if case_contexts:
+            llama_messages.append({
+                "role": "system",
+                "content": "\n\n".join(case_contexts)
+            })
 
     # Add conversation history (except the last user message, we'll add it with image if present)
     for msg in messages[:-1]:  # Exclude last message (it's the current user message)
@@ -177,7 +192,7 @@ async def chat(conversation_id: int, data: ChatRequest, request: Request):
         raise HTTPException(status_code=404, detail="Conversation not found")
 
     return StreamingResponse(
-        stream_chat_response(conversation_id, user_id, data.content, data.image),
+        stream_chat_response(conversation_id, user_id, data.content, data.image, data.case_refs),
         media_type="text/event-stream",
         headers={
             "Cache-Control": "no-cache",

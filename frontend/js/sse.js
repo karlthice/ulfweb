@@ -16,7 +16,7 @@ class SSEHandler {
      * @param {function} onError - Callback for errors
      * @param {string|null} imageBase64 - Optional base64-encoded image
      */
-    async streamMessage(conversationId, content, onChunk, onDone, onError, imageBase64 = null) {
+    async streamMessage(conversationId, content, onChunk, onDone, onError, imageBase64 = null, caseRefs = null) {
         // Abort any existing stream
         this.abort();
 
@@ -26,6 +26,9 @@ class SSEHandler {
             const body = { content };
             if (imageBase64) {
                 body.image = imageBase64;
+            }
+            if (caseRefs && caseRefs.length > 0) {
+                body.case_refs = caseRefs;
             }
 
             const response = await fetch(`/api/v1/chat/${conversationId}`, {

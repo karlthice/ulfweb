@@ -42,7 +42,7 @@
                 <div class="section-header">
                     <h2>Document Settings</h2>
                 </div>
-                <p class="section-description">Configure document settings.</p>
+                <p class="section-description">Configure AI servers for document processing and search.</p>
 
                 <div class="settings-form">
                     <div class="setting-group">
@@ -66,6 +66,47 @@
                         </select>
                         <p class="setting-hint">The AI server used for document summaries in GraphRAG.</p>
                     </div>
+                    <div class="setting-group checkbox-group">
+                        <label>
+                            <input type="checkbox" id="skip-contextual-retrieval">
+                            Skip contextual retrieval
+                        </label>
+                        <p class="setting-hint">Skip per-chunk context generation during document processing. Much faster but may reduce retrieval quality.</p>
+                    </div>
+                </div>
+            </section>
+
+            <section class="admin-section">
+                <div class="section-header">
+                    <h2>Vault</h2>
+                </div>
+                <p class="section-description">Configure AI servers for analyzing vault records.</p>
+
+                <div class="settings-form">
+                    <div class="setting-group">
+                        <label for="vault-image-server">Image Analysis</label>
+                        <select id="vault-image-server">
+                            <option value="">-- Select a server --</option>
+                        </select>
+                        <p class="setting-hint">The AI server used to analyze and describe uploaded images.</p>
+                    </div>
+                    <div class="setting-group">
+                        <label for="vault-text-server">Text Analysis</label>
+                        <select id="vault-text-server">
+                            <option value="">-- Select a server --</option>
+                        </select>
+                        <p class="setting-hint">The AI server used to analyze and summarize uploaded documents.</p>
+                    </div>
+                </div>
+            </section>
+
+            <section class="admin-section">
+                <div class="section-header">
+                    <h2>Translation</h2>
+                </div>
+                <p class="section-description">Configure the AI server for text translation.</p>
+
+                <div class="settings-form">
                     <div class="setting-group">
                         <label for="translation-server">Translation Server</label>
                         <select id="translation-server">
@@ -73,6 +114,16 @@
                         </select>
                         <p class="setting-hint">The AI server used for text translation. Falls back to the Tilde config if not set.</p>
                     </div>
+                </div>
+            </section>
+
+            <section class="admin-section">
+                <div class="section-header">
+                    <h2>Dictation</h2>
+                </div>
+                <p class="section-description">Configure speech-to-text settings.</p>
+
+                <div class="settings-form">
                     <div class="setting-group">
                         <label for="whisper-model">Whisper Model</label>
                         <select id="whisper-model">
@@ -85,13 +136,6 @@
                             <option value="language-and-voice-lab/whisper-large-icelandic-62640-steps-967h-ct2">large-icelandic (RU)</option>
                         </select>
                         <p class="setting-hint">The Whisper model used for speech-to-text. Larger models are more accurate but slower.</p>
-                    </div>
-                    <div class="setting-group checkbox-group">
-                        <label>
-                            <input type="checkbox" id="skip-contextual-retrieval">
-                            Skip contextual retrieval
-                        </label>
-                        <p class="setting-hint">Skip per-chunk context generation during document processing. Much faster but may reduce retrieval quality.</p>
                     </div>
                 </div>
             </section>

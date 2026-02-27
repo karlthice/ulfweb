@@ -19,6 +19,9 @@ from backend.models import (
     Message,
     Server,
     UserSettings,
+    VaultCase,
+    VaultCaseWithRecords,
+    VaultRecord,
 )
 
 
@@ -735,7 +738,8 @@ async def get_admin_settings() -> AdminSettings:
         cursor = await db.execute(
             """SELECT document_ai_query_server_id, document_ai_extraction_server_id,
                       document_ai_understanding_server_id, translation_server_id,
-                      skip_contextual_retrieval, whisper_model
+                      skip_contextual_retrieval, whisper_model,
+                      vault_image_server_id, vault_text_server_id
                FROM admin_settings WHERE id = 1"""
         )
         row = await cursor.fetchone()
@@ -746,7 +750,9 @@ async def get_admin_settings() -> AdminSettings:
                 document_ai_understanding_server_id=row["document_ai_understanding_server_id"],
                 translation_server_id=row["translation_server_id"],
                 skip_contextual_retrieval=bool(row["skip_contextual_retrieval"]),
-                whisper_model=row["whisper_model"] or "large-v3-turbo"
+                whisper_model=row["whisper_model"] or "large-v3-turbo",
+                vault_image_server_id=row["vault_image_server_id"],
+                vault_text_server_id=row["vault_text_server_id"],
             )
         return AdminSettings()
 
@@ -760,6 +766,8 @@ async def update_admin_settings(updates: dict[str, Any]) -> AdminSettings:
         "translation_server_id",
         "skip_contextual_retrieval",
         "whisper_model",
+        "vault_image_server_id",
+        "vault_text_server_id",
     )
     async with get_db() as db:
         # Ensure row exists
@@ -781,3 +789,330 @@ async def update_admin_settings(updates: dict[str, Any]) -> AdminSettings:
             await db.commit()
 
         return await get_admin_settings()
+
+
+# Vault case operations
+async def list_vault_cases(user_id: int) -> list[VaultCase]:
+    """List cases accessible to user (own private + all public)."""
+    async with get_db() as db:
+        cursor = await db.execute(
+            """SELECT id, user_id, identifier, name, description, is_public, status,
+                      created_at, updated_at
+               FROM vault_cases
+               WHERE user_id = ? OR is_public = 1
+               ORDER BY updated_at DESC""",
+            (user_id,)
+        )
+        rows = await cursor.fetchall()
+        return [VaultCase(**dict(row)) for row in rows]
+
+
+async def create_vault_case(
+    user_id: int, identifier: str, name: str,
+    description: str = "", is_public: bool = False
+) -> VaultCase:
+    """Create a new vault case."""
+    async with get_db() as db:
+        now = datetime.utcnow()
+        cursor = await db.execute(
+            """INSERT INTO vault_cases (user_id, identifier, name, description, is_public, created_at, updated_at)
+               VALUES (?, ?, ?, ?, ?, ?, ?)""",
+            (user_id, identifier, name, description, 1 if is_public else 0, now, now)
+        )
+        await db.commit()
+        return VaultCase(
+            id=cursor.lastrowid, user_id=user_id, identifier=identifier,
+            name=name, description=description, is_public=is_public,
+            status="active", created_at=now, updated_at=now
+        )
+
+
+async def get_vault_case(case_id: int, user_id: int) -> VaultCaseWithRecords | None:
+    """Get a case with records if accessible to user."""
+    async with get_db() as db:
+        cursor = await db.execute(
+            """SELECT id, user_id, identifier, name, description, is_public, status,
+                      created_at, updated_at
+               FROM vault_cases
+               WHERE id = ? AND (user_id = ? OR is_public = 1)""",
+            (case_id, user_id)
+        )
+        row = await cursor.fetchone()
+        if not row:
+            return None
+
+        case = VaultCaseWithRecords(**dict(row))
+
+        cursor = await db.execute(
+            """SELECT id, case_id, record_type, title, content, filename, original_filename,
+                      file_size, ai_description, starred, record_date, created_at
+               FROM vault_records
+               WHERE case_id = ?
+               ORDER BY record_date DESC, created_at DESC""",
+            (case_id,)
+        )
+        records = await cursor.fetchall()
+        case.records = [VaultRecord(**dict(r)) for r in records]
+        case.record_count = len(case.records)
+        return case
+
+
+async def update_vault_case(case_id: int, user_id: int, updates: dict[str, Any]) -> VaultCase | None:
+    """Update a case (owner only)."""
+    async with get_db() as db:
+        set_clauses = ["updated_at = ?"]
+        values: list[Any] = [datetime.utcnow()]
+
+        valid_keys = ("identifier", "name", "description", "is_public", "status")
+        for key, value in updates.items():
+            if key not in valid_keys or value is None:
+                continue
+            if key == "is_public":
+                set_clauses.append(f"{key} = ?")
+                values.append(1 if value else 0)
+            else:
+                set_clauses.append(f"{key} = ?")
+                values.append(value)
+
+        values.extend([case_id, user_id])
+        cursor = await db.execute(
+            f"UPDATE vault_cases SET {', '.join(set_clauses)} WHERE id = ? AND user_id = ?",
+            values
+        )
+        await db.commit()
+
+        if cursor.rowcount == 0:
+            return None
+
+        cursor = await db.execute(
+            """SELECT id, user_id, identifier, name, description, is_public, status,
+                      created_at, updated_at
+               FROM vault_cases WHERE id = ?""",
+            (case_id,)
+        )
+        row = await cursor.fetchone()
+        return VaultCase(**dict(row)) if row else None
+
+
+async def delete_vault_case(case_id: int, user_id: int) -> bool:
+    """Delete a case and all records (owner only)."""
+    async with get_db() as db:
+        cursor = await db.execute(
+            "DELETE FROM vault_cases WHERE id = ? AND user_id = ?",
+            (case_id, user_id)
+        )
+        await db.commit()
+        return cursor.rowcount > 0
+
+
+async def search_vault_cases(user_id: int, query: str) -> list[VaultCase]:
+    """Search cases by name/identifier for @mention autocomplete."""
+    async with get_db() as db:
+        pattern = f"%{query}%"
+        cursor = await db.execute(
+            """SELECT id, user_id, identifier, name, description, is_public, status,
+                      created_at, updated_at
+               FROM vault_cases
+               WHERE (user_id = ? OR is_public = 1)
+                 AND (name LIKE ? OR identifier LIKE ?)
+               ORDER BY updated_at DESC
+               LIMIT 20""",
+            (user_id, pattern, pattern)
+        )
+        rows = await cursor.fetchall()
+        return [VaultCase(**dict(row)) for row in rows]
+
+
+# Vault record operations
+async def create_vault_record(
+    case_id: int, record_type: str, title: str, record_date: str,
+    content: str | None = None, filename: str | None = None,
+    original_filename: str | None = None, file_size: int | None = None
+) -> VaultRecord:
+    """Create a new vault record."""
+    async with get_db() as db:
+        now = datetime.utcnow()
+        cursor = await db.execute(
+            """INSERT INTO vault_records
+               (case_id, record_type, title, content, filename, original_filename,
+                file_size, record_date, created_at)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            (case_id, record_type, title, content, filename,
+             original_filename, file_size, record_date, now)
+        )
+        await db.commit()
+
+        # Touch case updated_at
+        await db.execute(
+            "UPDATE vault_cases SET updated_at = ? WHERE id = ?",
+            (now, case_id)
+        )
+        await db.commit()
+
+        return VaultRecord(
+            id=cursor.lastrowid, case_id=case_id, record_type=record_type,
+            title=title, content=content, filename=filename,
+            original_filename=original_filename, file_size=file_size,
+            ai_description=None, starred=False, record_date=record_date,
+            created_at=now
+        )
+
+
+async def toggle_vault_record_star(record_id: int) -> VaultRecord | None:
+    """Toggle starred status on a record."""
+    async with get_db() as db:
+        cursor = await db.execute(
+            "SELECT starred FROM vault_records WHERE id = ?",
+            (record_id,)
+        )
+        row = await cursor.fetchone()
+        if not row:
+            return None
+
+        new_starred = 0 if row["starred"] else 1
+        await db.execute(
+            "UPDATE vault_records SET starred = ? WHERE id = ?",
+            (new_starred, record_id)
+        )
+        await db.commit()
+
+        cursor = await db.execute(
+            """SELECT id, case_id, record_type, title, content, filename, original_filename,
+                      file_size, ai_description, starred, record_date, created_at
+               FROM vault_records WHERE id = ?""",
+            (record_id,)
+        )
+        row = await cursor.fetchone()
+        return VaultRecord(**dict(row)) if row else None
+
+
+async def delete_vault_record(record_id: int) -> bool:
+    """Delete a vault record."""
+    async with get_db() as db:
+        cursor = await db.execute(
+            "DELETE FROM vault_records WHERE id = ?",
+            (record_id,)
+        )
+        await db.commit()
+        return cursor.rowcount > 0
+
+
+async def update_vault_record_ai_description(record_id: int, ai_description: str) -> None:
+    """Update AI description for a vault record."""
+    async with get_db() as db:
+        await db.execute(
+            "UPDATE vault_records SET ai_description = ? WHERE id = ?",
+            (ai_description, record_id)
+        )
+        await db.commit()
+
+
+async def get_vault_case_context(case_id: int, user_id: int, max_recent: int = 5) -> str | None:
+    """Build context string for @Case injection into chat. Returns None if not accessible."""
+    async with get_db() as db:
+        # Verify access
+        cursor = await db.execute(
+            """SELECT id, name, identifier, description, status
+               FROM vault_cases
+               WHERE id = ? AND (user_id = ? OR is_public = 1)""",
+            (case_id, user_id)
+        )
+        case_row = await cursor.fetchone()
+        if not case_row:
+            return None
+
+        case = dict(case_row)
+        parts = [f'[Referenced Case: "{case["name"]}" ({case["identifier"]}) - {case["status"].title()}]']
+        if case["description"]:
+            parts.append(f'Description: {case["description"]}')
+
+        # Get starred records
+        cursor = await db.execute(
+            """SELECT title, content, ai_description, record_type, record_date
+               FROM vault_records
+               WHERE case_id = ? AND starred = 1
+               ORDER BY record_date DESC""",
+            (case_id,)
+        )
+        starred = await cursor.fetchall()
+
+        if starred:
+            parts.append("\nStarred Records:")
+            for r in starred:
+                r = dict(r)
+                text = r["content"] or r["ai_description"] or ""
+                if text:
+                    # Truncate long records
+                    text = text[:500] + "..." if len(text) > 500 else text
+                parts.append(f'- {r["record_date"]} "{r["title"]}": {text}')
+
+        # Get recent unstarred records
+        cursor = await db.execute(
+            """SELECT title, content, ai_description, record_type, record_date
+               FROM vault_records
+               WHERE case_id = ? AND starred = 0
+               ORDER BY record_date DESC
+               LIMIT ?""",
+            (case_id, max_recent)
+        )
+        recent = await cursor.fetchall()
+
+        if recent:
+            parts.append("\nRecent Records:")
+            for r in recent:
+                r = dict(r)
+                text = r["content"] or r["ai_description"] or ""
+                if text:
+                    text = text[:500] + "..." if len(text) > 500 else text
+                label = "[AI Summary] " if r["record_type"] != "text" and r["ai_description"] else ""
+                parts.append(f'- {r["record_date"]} "{r["title"]}": {label}{text}')
+
+        parts.append("[End Case Context]")
+        return "\n".join(parts)
+
+
+async def search_vault_records(user_id: int, query: str, case_id: int | None = None) -> list[dict]:
+    """Full-text search across vault records accessible to user."""
+    async with get_db() as db:
+        pattern = f"%{query}%"
+        if case_id:
+            cursor = await db.execute(
+                """SELECT r.id, r.case_id, r.record_type, r.title, r.content,
+                          r.ai_description, r.record_date, r.starred,
+                          c.name as case_name, c.identifier as case_identifier
+                   FROM vault_records r
+                   JOIN vault_cases c ON c.id = r.case_id
+                   WHERE r.case_id = ? AND (c.user_id = ? OR c.is_public = 1)
+                     AND (r.title LIKE ? OR r.content LIKE ? OR r.ai_description LIKE ?)
+                   ORDER BY r.record_date DESC
+                   LIMIT 50""",
+                (case_id, user_id, pattern, pattern, pattern)
+            )
+        else:
+            cursor = await db.execute(
+                """SELECT r.id, r.case_id, r.record_type, r.title, r.content,
+                          r.ai_description, r.record_date, r.starred,
+                          c.name as case_name, c.identifier as case_identifier
+                   FROM vault_records r
+                   JOIN vault_cases c ON c.id = r.case_id
+                   WHERE (c.user_id = ? OR c.is_public = 1)
+                     AND (r.title LIKE ? OR r.content LIKE ? OR r.ai_description LIKE ?)
+                   ORDER BY r.record_date DESC
+                   LIMIT 50""",
+                (user_id, pattern, pattern, pattern)
+            )
+        rows = await cursor.fetchall()
+        return [dict(r) for r in rows]
+
+
+async def get_vault_record(record_id: int) -> VaultRecord | None:
+    """Get a single vault record by ID."""
+    async with get_db() as db:
+        cursor = await db.execute(
+            """SELECT id, case_id, record_type, title, content, filename, original_filename,
+                      file_size, ai_description, starred, record_date, created_at
+               FROM vault_records WHERE id = ?""",
+            (record_id,)
+        )
+        row = await cursor.fetchone()
+        return VaultRecord(**dict(row)) if row else None
