@@ -80,6 +80,10 @@ const conversations = {
 
         // New chat button
         document.getElementById('new-chat-btn').addEventListener('click', async () => {
+            // Switch to chat mode if not already there
+            if (currentMode !== 'chat') {
+                document.getElementById('chat-tab').click();
+            }
             await this.create();
         });
     },

@@ -61,7 +61,6 @@ function setupModeTabs() {
         vaultPanel.classList.toggle('hidden', mode !== 'vault');
 
         // Show/hide chat-specific sidebar elements
-        newChatBtn.classList.toggle('hidden', mode !== 'chat');
         conversationsList.classList.toggle('hidden', mode !== 'chat');
 
         // Load vault data when switching to vault tab

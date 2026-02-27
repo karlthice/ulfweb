@@ -65,14 +65,19 @@
 }
 
 @media (max-width: 480px) {
-    /* Smaller sidebar on very small screens */
+    /* Sidebar on very small screens */
     .sidebar {
-        width: 280px;
+        width: 260px;
     }
 
     /* Smaller font sizes */
     .logo {
-        font-size: 1.1rem;
+        font-size: 0.9rem;
+    }
+
+    .nav-item {
+        font-size: 0.85rem;
+        padding: 0.4rem 0.65rem;
     }
 
     .chat-title {
@@ -117,7 +122,7 @@
 /* Tablet adjustments */
 @media (min-width: 769px) and (max-width: 1024px) {
     .sidebar {
-        width: 240px;
+        width: 220px;
     }
 
     .message-inner {
@@ -185,15 +190,6 @@
 }
 
 @media (max-width: 480px) {
-    .mode-tabs {
-        gap: 0.25rem;
-    }
-
-    .mode-tab {
-        padding: 0.4rem 0.5rem;
-        font-size: 0.8rem;
-    }
-
     .translate-section textarea {
         min-height: 80px;
         font-size: 0.95rem;
