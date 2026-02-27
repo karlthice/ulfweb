@@ -212,6 +212,20 @@ CREATE INDEX IF NOT EXISTS idx_vault_cases_user_id ON vault_cases(user_id);
 CREATE INDEX IF NOT EXISTS idx_vault_cases_public ON vault_cases(is_public);
 CREATE INDEX IF NOT EXISTS idx_vault_records_case_id ON vault_records(case_id);
 CREATE INDEX IF NOT EXISTS idx_vault_records_starred ON vault_records(starred);
+
+-- Activity log
+CREATE TABLE IF NOT EXISTS activity_log (
+    id INTEGER PRIMARY KEY,
+    user_id INTEGER,
+    user_ip TEXT NOT NULL,
+    action_type TEXT NOT NULL,
+    description TEXT NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (user_id) REFERENCES users(id)
+);
+CREATE INDEX IF NOT EXISTS idx_activity_log_created_at ON activity_log(created_at);
+CREATE INDEX IF NOT EXISTS idx_activity_log_action_type ON activity_log(action_type);
+CREATE INDEX IF NOT EXISTS idx_activity_log_user_ip ON activity_log(user_ip);
 """
 
 

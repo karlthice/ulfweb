@@ -1174,3 +1174,68 @@ async def update_vault_record(record_id: int, updates: dict) -> VaultRecord | No
         )
         await db.commit()
         return await get_vault_record(record_id)
+
+
+# Activity log operations
+import logging
+
+_activity_log = logging.getLogger("activity_log")
+
+
+async def log_activity(user_ip: str, action_type: str, description: str, user_id: int | None = None) -> None:
+    """Log a user activity. Fire-and-forget: errors are logged, not raised."""
+    try:
+        async with get_db() as db:
+            await db.execute(
+                """INSERT INTO activity_log (user_id, user_ip, action_type, description)
+                   VALUES (?, ?, ?, ?)""",
+                (user_id, user_ip, action_type, description)
+            )
+            await db.commit()
+    except Exception as e:
+        _activity_log.warning(f"Failed to log activity: {e}")
+
+
+async def get_activity_log(
+    offset: int = 0,
+    limit: int = 50,
+    action_type: str | None = None,
+    user_ip: str | None = None,
+    search: str | None = None,
+) -> tuple[list[dict], int]:
+    """Get paginated activity log entries with filters. Returns (entries, total)."""
+    async with get_db() as db:
+        where_clauses = []
+        params: list[Any] = []
+
+        if action_type:
+            where_clauses.append("action_type = ?")
+            params.append(action_type)
+        if user_ip:
+            where_clauses.append("user_ip LIKE ?")
+            params.append(f"%{user_ip}%")
+        if search:
+            where_clauses.append("description LIKE ?")
+            params.append(f"%{search}%")
+
+        where_sql = (" WHERE " + " AND ".join(where_clauses)) if where_clauses else ""
+
+        # Get total count
+        cursor = await db.execute(
+            f"SELECT COUNT(*) FROM activity_log{where_sql}",
+            params
+        )
+        total = (await cursor.fetchone())[0]
+
+        # Get entries
+        cursor = await db.execute(
+            f"""SELECT id, user_id, user_ip, action_type, description, created_at
+                FROM activity_log{where_sql}
+                ORDER BY created_at DESC
+                LIMIT ? OFFSET ?""",
+            params + [limit, offset]
+        )
+        rows = await cursor.fetchall()
+        entries = [dict(row) for row in rows]
+
+        return entries, total

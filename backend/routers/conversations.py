@@ -14,6 +14,7 @@ from backend.services.storage import (
     get_conversation,
     get_or_create_user,
     list_conversations,
+    log_activity,
     update_conversation,
 )
 
@@ -42,7 +43,9 @@ async def create_new_conversation(request: Request, data: ConversationCreate = N
     ip = get_client_ip(request)
     user_id = await get_or_create_user(ip)
     title = data.title if data else "New Conversation"
-    return await create_conversation(user_id, title)
+    conv = await create_conversation(user_id, title)
+    await log_activity(ip, "conversation.create", f"Created conversation '{title}'", user_id)
+    return conv
 
 
 @router.get("/{conversation_id}", response_model=ConversationWithMessages)
@@ -68,6 +71,7 @@ async def update_conversation_title(
     conversation = await update_conversation(conversation_id, user_id, data.title)
     if not conversation:
         raise HTTPException(status_code=404, detail="Conversation not found")
+    await log_activity(ip, "conversation.rename", f"Renamed conversation to '{data.title}'", user_id)
     return conversation
 
 
@@ -79,3 +83,4 @@ async def delete_conversation_endpoint(conversation_id: int, request: Request):
     deleted = await delete_conversation(conversation_id, user_id)
     if not deleted:
         raise HTTPException(status_code=404, detail="Conversation not found")
+    await log_activity(ip, "conversation.delete", f"Deleted conversation {conversation_id}", user_id)

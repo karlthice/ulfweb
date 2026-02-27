@@ -16,6 +16,7 @@
                 <span>ULF web - Admin</span>
             </div>
             <div class="header-actions">
+                <button class="system-info-btn" id="activity-log-btn">User Logs</button>
                 <button class="system-info-btn" id="system-info-btn">System Info</button>
                 <button class="restart-ulfweb-btn" id="restart-ulfweb-btn">Restart ULF Web</button>
                 <a href="/" class="back-link">Back to Chat</a>
@@ -262,6 +263,23 @@
         </div>
     </div>
 
+    <!-- Log Viewer Modal -->
+    <div class="modal hidden" id="log-viewer-modal">
+        <div class="modal-overlay" id="log-viewer-modal-overlay"></div>
+        <div class="modal-content log-viewer-modal-content">
+            <div class="modal-header">
+                <h2 id="log-viewer-title">Server Log</h2>
+                <div class="log-viewer-header-actions">
+                    <button class="log-refresh-btn" id="log-refresh-btn">Refresh</button>
+                    <button class="close-btn" id="close-log-viewer-modal">&times;</button>
+                </div>
+            </div>
+            <div class="modal-body">
+                <pre class="log-viewer-body" id="log-viewer-body">Loading...</pre>
+            </div>
+        </div>
+    </div>
+
     <!-- System Info Modal -->
     <div class="modal hidden" id="system-info-modal">
         <div class="modal-overlay" id="system-info-modal-overlay"></div>
@@ -272,6 +290,42 @@
             </div>
             <div class="modal-body" id="system-info-body">
                 <p>Loading...</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Activity Log Modal -->
+    <div class="modal hidden" id="activity-log-modal">
+        <div class="modal-overlay" id="activity-log-modal-overlay"></div>
+        <div class="modal-content activity-log-modal-content">
+            <div class="modal-header">
+                <h2>User Activity Log</h2>
+                <button class="close-btn" id="close-activity-log-modal">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="activity-log-filters">
+                    <input type="text" id="activity-log-search" placeholder="Search descriptions..." class="activity-log-input">
+                    <select id="activity-log-action-type" class="activity-log-select">
+                        <option value="">All actions</option>
+                    </select>
+                    <input type="text" id="activity-log-ip" placeholder="Filter by IP..." class="activity-log-input activity-log-ip-input">
+                </div>
+                <div class="activity-log-table-wrap">
+                    <table class="activity-log-table">
+                        <thead>
+                            <tr>
+                                <th>Time</th>
+                                <th>IP</th>
+                                <th>Action</th>
+                                <th>Description</th>
+                            </tr>
+                        </thead>
+                        <tbody id="activity-log-tbody">
+                            <tr><td colspan="4" class="activity-log-empty">Loading...</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+                <div class="activity-log-pagination" id="activity-log-pagination"></div>
             </div>
         </div>
     </div>

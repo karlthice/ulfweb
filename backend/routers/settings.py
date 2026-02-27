@@ -6,6 +6,7 @@ from backend.models import UserSettings, UserSettingsUpdate
 from backend.services.storage import (
     get_or_create_user,
     get_user_settings,
+    log_activity,
     update_user_settings,
 )
 
@@ -34,4 +35,7 @@ async def update_settings(data: UserSettingsUpdate, request: Request):
     ip = get_client_ip(request)
     user_id = await get_or_create_user(ip)
     updates = data.model_dump(exclude_unset=True)
-    return await update_user_settings(user_id, updates)
+    result = await update_user_settings(user_id, updates)
+    changed = ", ".join(updates.keys())
+    await log_activity(ip, "settings.update", f"Updated settings: {changed}", user_id)
+    return result

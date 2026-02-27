@@ -6,7 +6,7 @@ import socket
 import sys
 from pathlib import Path
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Request
 
 from backend.config import settings
 from backend.models import AdminSettings, AdminSettingsUpdate, Server, ServerCreate, ServerUpdate
@@ -20,9 +20,19 @@ from backend.services.storage import (
     delete_server,
     get_admin_settings,
     update_admin_settings,
+    log_activity,
+    get_activity_log,
 )
 
 router = APIRouter(prefix="/admin", tags=["admin"])
+
+
+def get_client_ip(request: Request) -> str:
+    """Extract client IP from request."""
+    forwarded = request.headers.get("X-Forwarded-For")
+    if forwarded:
+        return forwarded.split(",")[0].strip()
+    return request.client.host if request.client else "127.0.0.1"
 
 
 def _find_free_port() -> int:
@@ -149,7 +159,7 @@ async def get_active_servers():
 
 
 @router.post("/servers", response_model=Server)
-async def add_server(data: ServerCreate):
+async def add_server(data: ServerCreate, request: Request):
     """Add a new server."""
     url = data.url
     if not url:
@@ -171,6 +181,8 @@ async def add_server(data: ServerCreate):
             server.id, server.model_path, server.url, server.parallel, server.ctx_size
         )
 
+    ip = get_client_ip(request)
+    await log_activity(ip, "admin.server.create", f"Created server '{server.friendly_name}'")
     return server
 
 
@@ -184,7 +196,7 @@ async def get_server_by_id(server_id: int):
 
 
 @router.put("/servers/{server_id}", response_model=Server)
-async def update_server_by_id(server_id: int, data: ServerUpdate):
+async def update_server_by_id(server_id: int, data: ServerUpdate, request: Request):
     """Update a server."""
     old_server = await get_server(server_id)
     if not old_server:
@@ -216,22 +228,29 @@ async def update_server_by_id(server_id: int, data: ServerUpdate):
                 server_id, new_server.model_path, new_server.url, new_server.parallel, new_server.ctx_size
             )
 
+    ip = get_client_ip(request)
+    await log_activity(ip, "admin.server.update", f"Updated server '{new_server.friendly_name}'")
     return new_server
 
 
 @router.delete("/servers/{server_id}")
-async def delete_server_by_id(server_id: int):
+async def delete_server_by_id(server_id: int, request: Request):
     """Delete a server."""
+    server = await get_server(server_id)
     # Stop any running process first
     await llama_manager.stop_server(server_id)
 
     if not await delete_server(server_id):
         raise HTTPException(status_code=404, detail="Server not found")
+
+    ip = get_client_ip(request)
+    name = server.friendly_name if server else f"ID {server_id}"
+    await log_activity(ip, "admin.server.delete", f"Deleted server '{name}'")
     return {"status": "deleted"}
 
 
 @router.post("/servers/{server_id}/start")
-async def start_server_process(server_id: int):
+async def start_server_process(server_id: int, request: Request):
     """Start a server's llama.cpp process."""
     server = await get_server(server_id)
     if not server:
@@ -247,11 +266,13 @@ async def start_server_process(server_id: int):
     if not success:
         raise HTTPException(status_code=500, detail="Failed to start server process")
 
+    ip = get_client_ip(request)
+    await log_activity(ip, "admin.server.start", f"Started server '{server.friendly_name}'")
     return {"status": "started"}
 
 
 @router.post("/servers/{server_id}/stop")
-async def stop_server_process(server_id: int):
+async def stop_server_process(server_id: int, request: Request):
     """Stop a server's llama.cpp process."""
     server = await get_server(server_id)
     if not server:
@@ -262,11 +283,13 @@ async def stop_server_process(server_id: int):
     if not success:
         raise HTTPException(status_code=500, detail="Failed to stop server process")
 
+    ip = get_client_ip(request)
+    await log_activity(ip, "admin.server.stop", f"Stopped server '{server.friendly_name}'")
     return {"status": "stopped"}
 
 
 @router.post("/servers/{server_id}/restart")
-async def restart_server_process(server_id: int):
+async def restart_server_process(server_id: int, request: Request):
     """Restart a server's llama.cpp process."""
     server = await get_server(server_id)
     if not server:
@@ -285,7 +308,27 @@ async def restart_server_process(server_id: int):
     if not success:
         raise HTTPException(status_code=500, detail="Failed to restart server process")
 
+    ip = get_client_ip(request)
+    await log_activity(ip, "admin.server.restart", f"Restarted server '{server.friendly_name}'")
     return {"status": "restarted"}
+
+
+@router.get("/servers/{server_id}/log")
+async def get_server_log(server_id: int, tail: int = 200):
+    """Get the log file for a server process."""
+    server = await get_server(server_id)
+    if not server:
+        raise HTTPException(status_code=404, detail="Server not found")
+
+    log_path = Path("data/logs") / f"llama-server-{server_id}.log"
+    filename = log_path.name
+    if not log_path.exists():
+        return {"log": "", "filename": filename}
+
+    lines = log_path.read_text(errors="replace").splitlines()
+    if tail > 0:
+        lines = lines[-tail:]
+    return {"log": "\n".join(lines), "filename": filename}
 
 
 @router.get("/servers/{server_id}/status")
@@ -300,11 +343,14 @@ async def get_server_process_status(server_id: int):
 
 
 @router.post("/restart")
-async def restart_ulfweb():
+async def restart_ulfweb(request: Request):
     """Restart the entire ULF Web application.
 
     Touches main.py to trigger uvicorn's file-change reloader.
     """
+    ip = get_client_ip(request)
+    await log_activity(ip, "admin.restart", "Restarted ULF Web application")
+
     def _do_restart():
         llama_manager.cleanup()
         # Touch a source file to trigger uvicorn's WatchFiles reloader
@@ -323,10 +369,14 @@ async def get_settings():
 
 
 @router.put("/settings", response_model=AdminSettings)
-async def update_settings(data: AdminSettingsUpdate):
+async def update_settings(data: AdminSettingsUpdate, request: Request):
     """Update admin settings."""
     updates = data.model_dump(exclude_unset=True)
-    return await update_admin_settings(updates)
+    result = await update_admin_settings(updates)
+    ip = get_client_ip(request)
+    changed = ", ".join(updates.keys())
+    await log_activity(ip, "admin.settings.update", f"Updated admin settings: {changed}")
+    return result
 
 
 @router.get("/date-format")
@@ -334,3 +384,29 @@ async def get_date_format():
     """Get the configured date format (public endpoint)."""
     settings = await get_admin_settings()
     return {"date_format": settings.date_format}
+
+
+# Activity log endpoints
+@router.get("/activity-log")
+async def get_activity_log_entries(
+    offset: int = 0,
+    limit: int = 50,
+    action_type: str | None = None,
+    user_ip: str | None = None,
+    search: str | None = None,
+):
+    """Get paginated activity log entries with optional filters."""
+    entries, total = await get_activity_log(offset, limit, action_type, user_ip, search)
+    return {"entries": entries, "total": total, "offset": offset, "limit": limit}
+
+
+@router.get("/activity-log/action-types")
+async def get_activity_log_action_types():
+    """Get distinct action types from the activity log."""
+    from backend.database import get_db
+    async with get_db() as db:
+        cursor = await db.execute(
+            "SELECT DISTINCT action_type FROM activity_log ORDER BY action_type"
+        )
+        rows = await cursor.fetchall()
+        return {"action_types": [row["action_type"] for row in rows]}

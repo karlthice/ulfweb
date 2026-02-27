@@ -11,6 +11,8 @@ const admin = {
     availableModels: [],
     serverStatuses: {},
     statusPollingInterval: null,
+    currentLogServerId: null,
+    activityLogState: { offset: 0, limit: 50, total: 0, action_type: '', user_ip: '', search: '' },
 
     /**
      * Initialize admin page
@@ -46,12 +48,53 @@ const admin = {
             this.saveServer();
         });
 
+        // Log viewer event listeners
+        document.getElementById('close-log-viewer-modal').addEventListener('click', () => {
+            this.closeLogViewer();
+        });
+        document.getElementById('log-viewer-modal-overlay').addEventListener('click', () => {
+            this.closeLogViewer();
+        });
+        document.getElementById('log-refresh-btn').addEventListener('click', () => {
+            this.refreshLog();
+        });
+
+        // Activity log event listeners
+        document.getElementById('activity-log-btn').addEventListener('click', () => {
+            this.openActivityLogModal();
+        });
+        document.getElementById('close-activity-log-modal').addEventListener('click', () => {
+            this.closeActivityLogModal();
+        });
+        document.getElementById('activity-log-modal-overlay').addEventListener('click', () => {
+            this.closeActivityLogModal();
+        });
+
+        const logDebounce = this.debounce(() => this.loadActivityLog(), 300);
+        document.getElementById('activity-log-search').addEventListener('input', (e) => {
+            this.activityLogState.search = e.target.value;
+            this.activityLogState.offset = 0;
+            logDebounce();
+        });
+        document.getElementById('activity-log-action-type').addEventListener('change', (e) => {
+            this.activityLogState.action_type = e.target.value;
+            this.activityLogState.offset = 0;
+            this.loadActivityLog();
+        });
+        document.getElementById('activity-log-ip').addEventListener('input', (e) => {
+            this.activityLogState.user_ip = e.target.value;
+            this.activityLogState.offset = 0;
+            logDebounce();
+        });
+
         // Close modal on escape
         document.addEventListener('keydown', (e) => {
             if (e.key === 'Escape') {
                 this.closeServerModal();
                 this.closeCollectionModal();
                 this.closeSystemInfoModal();
+                this.closeLogViewer();
+                this.closeActivityLogModal();
             }
         });
 
@@ -371,6 +414,7 @@ const admin = {
                     <div class="process-controls">
                         ${processControls}
                     </div>
+                    ${hasModel ? `<button class="log-btn" onclick="admin.openLogViewer(${server.id})">View Log</button>` : ''}
                     <button class="edit-btn" onclick="admin.editServer(${server.id})">Edit</button>
                     <button class="delete-btn" onclick="admin.deleteServer(${server.id})">Delete</button>
                 </div>
@@ -893,6 +937,53 @@ const admin = {
         }
     },
 
+    // Log viewer methods
+
+    async openLogViewer(serverId) {
+        const server = this.servers.find(s => s.id === serverId);
+        if (!server) return;
+
+        this.currentLogServerId = serverId;
+        const modal = document.getElementById('log-viewer-modal');
+        const title = document.getElementById('log-viewer-title');
+        const body = document.getElementById('log-viewer-body');
+
+        title.textContent = `Log: ${server.friendly_name}`;
+        body.textContent = 'Loading...';
+        modal.classList.remove('hidden');
+
+        try {
+            const response = await fetch(`${API_BASE}/admin/servers/${serverId}/log`);
+            if (!response.ok) throw new Error('Failed to fetch log');
+            const data = await response.json();
+            body.textContent = data.log || 'No log output yet.';
+            body.scrollTop = body.scrollHeight;
+        } catch (error) {
+            console.error('Failed to load log:', error);
+            body.textContent = 'Failed to load log.';
+        }
+    },
+
+    closeLogViewer() {
+        document.getElementById('log-viewer-modal').classList.add('hidden');
+        this.currentLogServerId = null;
+    },
+
+    async refreshLog() {
+        if (!this.currentLogServerId) return;
+        const body = document.getElementById('log-viewer-body');
+
+        try {
+            const response = await fetch(`${API_BASE}/admin/servers/${this.currentLogServerId}/log`);
+            if (!response.ok) throw new Error('Failed to fetch log');
+            const data = await response.json();
+            body.textContent = data.log || 'No log output yet.';
+            body.scrollTop = body.scrollHeight;
+        } catch (error) {
+            console.error('Failed to refresh log:', error);
+        }
+    },
+
     // System Info methods
 
     async openSystemInfoModal() {
@@ -991,6 +1082,111 @@ const admin = {
         const i = Math.floor(Math.log(bytes) / Math.log(1024));
         const val = bytes / Math.pow(1024, i);
         return `${val.toFixed(1)} ${units[i]}`;
+    },
+
+    // Activity log methods
+
+    debounce(fn, delay) {
+        let timer;
+        return (...args) => {
+            clearTimeout(timer);
+            timer = setTimeout(() => fn.apply(this, args), delay);
+        };
+    },
+
+    async openActivityLogModal() {
+        const modal = document.getElementById('activity-log-modal');
+        modal.classList.remove('hidden');
+        this.activityLogState.offset = 0;
+        await this.loadActionTypes();
+        await this.loadActivityLog();
+    },
+
+    closeActivityLogModal() {
+        document.getElementById('activity-log-modal').classList.add('hidden');
+    },
+
+    async loadActionTypes() {
+        try {
+            const response = await fetch(`${API_BASE}/admin/activity-log/action-types`);
+            if (!response.ok) return;
+            const data = await response.json();
+            const select = document.getElementById('activity-log-action-type');
+            const current = select.value;
+            select.innerHTML = '<option value="">All actions</option>';
+            for (const type of data.action_types) {
+                const option = document.createElement('option');
+                option.value = type;
+                option.textContent = type;
+                select.appendChild(option);
+            }
+            select.value = current;
+        } catch (error) {
+            console.error('Failed to load action types:', error);
+        }
+    },
+
+    async loadActivityLog() {
+        const s = this.activityLogState;
+        const params = new URLSearchParams({ offset: s.offset, limit: s.limit });
+        if (s.action_type) params.set('action_type', s.action_type);
+        if (s.user_ip) params.set('user_ip', s.user_ip);
+        if (s.search) params.set('search', s.search);
+
+        try {
+            const response = await fetch(`${API_BASE}/admin/activity-log?${params}`);
+            if (!response.ok) throw new Error('Failed to fetch activity log');
+            const data = await response.json();
+            s.total = data.total;
+            this.renderActivityLog(data.entries);
+            this.renderActivityLogPagination();
+        } catch (error) {
+            console.error('Failed to load activity log:', error);
+            document.getElementById('activity-log-tbody').innerHTML =
+                '<tr><td colspan="4" class="activity-log-empty">Failed to load activity log.</td></tr>';
+        }
+    },
+
+    renderActivityLog(entries) {
+        const tbody = document.getElementById('activity-log-tbody');
+        if (entries.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="4" class="activity-log-empty">No activity found.</td></tr>';
+            return;
+        }
+
+        tbody.innerHTML = entries.map(entry => {
+            const date = new Date(entry.created_at + 'Z');
+            const time = date.toLocaleString();
+            return `<tr>
+                <td class="activity-log-time">${this.escapeHtml(time)}</td>
+                <td class="activity-log-ip">${this.escapeHtml(entry.user_ip)}</td>
+                <td><span class="activity-log-badge">${this.escapeHtml(entry.action_type)}</span></td>
+                <td>${this.escapeHtml(entry.description)}</td>
+            </tr>`;
+        }).join('');
+    },
+
+    renderActivityLogPagination() {
+        const s = this.activityLogState;
+        const container = document.getElementById('activity-log-pagination');
+        const totalPages = Math.ceil(s.total / s.limit);
+        const currentPage = Math.floor(s.offset / s.limit) + 1;
+
+        if (totalPages <= 1) {
+            container.innerHTML = s.total > 0 ? `<span class="activity-log-total">${s.total} entries</span>` : '';
+            return;
+        }
+
+        container.innerHTML = `
+            <button class="activity-log-page-btn" ${currentPage <= 1 ? 'disabled' : ''} onclick="admin.activityLogPage(${s.offset - s.limit})">Previous</button>
+            <span class="activity-log-page-info">Page ${currentPage} of ${totalPages} (${s.total} entries)</span>
+            <button class="activity-log-page-btn" ${currentPage >= totalPages ? 'disabled' : ''} onclick="admin.activityLogPage(${s.offset + s.limit})">Next</button>
+        `;
+    },
+
+    activityLogPage(newOffset) {
+        this.activityLogState.offset = Math.max(0, newOffset);
+        this.loadActivityLog();
     }
 };
 

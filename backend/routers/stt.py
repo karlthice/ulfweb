@@ -4,19 +4,28 @@ import asyncio
 import json
 import time
 
-from fastapi import APIRouter, File, Form, HTTPException, UploadFile
+from fastapi import APIRouter, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import StreamingResponse
 
 from backend.services.meeting_session import meeting_session_manager
 from backend.services.stt_service import stt_service
-from backend.services.storage import get_admin_settings
+from backend.services.storage import get_admin_settings, log_activity
 
 
 router = APIRouter(prefix="/stt", tags=["stt"])
 
 
+def get_client_ip(request: Request) -> str:
+    """Extract client IP from request."""
+    forwarded = request.headers.get("X-Forwarded-For")
+    if forwarded:
+        return forwarded.split(",")[0].strip()
+    return request.client.host if request.client else "127.0.0.1"
+
+
 @router.post("")
 async def transcribe_audio(
+    request: Request,
     audio: UploadFile = File(...),
     language: str | None = Form(default=None),
 ):
@@ -33,6 +42,8 @@ async def transcribe_audio(
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Transcription failed: {e}")
 
+    ip = get_client_ip(request)
+    await log_activity(ip, "stt.transcribe", f"Transcribed audio ({len(audio_bytes)} bytes)")
     return result
 
 
@@ -51,9 +62,11 @@ async def get_models():
 # --- Meeting dictation endpoints ---
 
 @router.post("/meeting/start")
-async def meeting_start():
+async def meeting_start(request: Request):
     """Create a new meeting recording session."""
     session_id = meeting_session_manager.create_session()
+    ip = get_client_ip(request)
+    await log_activity(ip, "stt.meeting.start", f"Started meeting session {session_id}")
     return {"session_id": session_id}
 
 
@@ -78,6 +91,7 @@ async def meeting_chunk(
 @router.post("/meeting/{session_id}/finalize")
 async def meeting_finalize(
     session_id: str,
+    request: Request,
     language: str | None = Form(default=None),
 ):
     """Finalize a meeting session: assemble, diarize, and transcribe.
@@ -86,6 +100,9 @@ async def meeting_finalize(
     """
     if not meeting_session_manager.session_exists(session_id):
         raise HTTPException(status_code=404, detail="Session not found")
+
+    ip = get_client_ip(request)
+    await log_activity(ip, "stt.meeting.finalize", f"Finalized meeting session {session_id}")
 
     language = language or None
 

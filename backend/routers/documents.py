@@ -18,8 +18,18 @@ from backend.models import (
 )
 from backend.services import storage
 from backend.services.graphrag import graphrag_service
+from backend.services.storage import log_activity
 
 router = APIRouter(prefix="/documents", tags=["documents"])
+
+
+def get_client_ip(request: Request) -> str:
+    """Extract client IP from request."""
+    forwarded = request.headers.get("X-Forwarded-For")
+    if forwarded:
+        return forwarded.split(",")[0].strip()
+    return request.client.host if request.client else "127.0.0.1"
+
 
 UPLOAD_DIR = Path("data/uploads")
 UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
@@ -33,10 +43,13 @@ async def list_collections():
 
 
 @router.post("/collections", response_model=Collection)
-async def create_collection(data: CollectionCreate):
+async def create_collection(data: CollectionCreate, request: Request):
     """Create a new collection (admin)."""
     try:
-        return await storage.create_collection(data.name, data.description)
+        collection = await storage.create_collection(data.name, data.description)
+        ip = get_client_ip(request)
+        await log_activity(ip, "document.collection.create", f"Created collection '{data.name}'")
+        return collection
     except Exception as e:
         if "UNIQUE constraint" in str(e):
             raise HTTPException(status_code=400, detail="Collection name already exists")
@@ -63,11 +76,13 @@ async def update_collection(collection_id: int, data: CollectionUpdate):
 
 
 @router.delete("/collections/{collection_id}")
-async def delete_collection(collection_id: int):
+async def delete_collection(collection_id: int, request: Request):
     """Delete a collection (admin). Cannot delete default collection."""
     deleted = await storage.delete_collection(collection_id)
     if not deleted:
         raise HTTPException(status_code=400, detail="Cannot delete collection (may be default or not found)")
+    ip = get_client_ip(request)
+    await log_activity(ip, "document.collection.delete", f"Deleted collection {collection_id}")
     return {"status": "deleted"}
 
 
@@ -123,6 +138,8 @@ async def upload_document(
         file_path
     )
 
+    ip = get_client_ip(request)
+    await log_activity(ip, "document.upload", f"Uploaded '{file.filename}' to collection {collection_id}")
     return document
 
 
@@ -159,7 +176,7 @@ async def get_document_file(document_id: int):
 
 
 @router.delete("/documents/{document_id}")
-async def delete_document(document_id: int):
+async def delete_document(document_id: int, request: Request):
     """Delete a document."""
     doc = await storage.get_document(document_id)
     if not doc:
@@ -172,16 +189,22 @@ async def delete_document(document_id: int):
     deleted = await storage.delete_document(document_id)
     if not deleted:
         raise HTTPException(status_code=500, detail="Failed to delete document")
+
+    ip = get_client_ip(request)
+    await log_activity(ip, "document.delete", f"Deleted document '{doc.original_filename}'")
     return {"status": "deleted"}
 
 
 # Query endpoint
 @router.post("/collections/{collection_id}/query")
-async def query_collection(collection_id: int, data: DocumentQuery):
+async def query_collection(collection_id: int, data: DocumentQuery, request: Request):
     """Query a collection with GraphRAG streaming."""
     collection = await storage.get_collection(collection_id)
     if not collection:
         raise HTTPException(status_code=404, detail="Collection not found")
+
+    ip = get_client_ip(request)
+    await log_activity(ip, "document.query", f"Queried collection {collection_id}")
 
     async def generate():
         async for chunk in graphrag_service.query(collection_id, data.question, data.top_k):

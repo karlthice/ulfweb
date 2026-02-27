@@ -4,12 +4,12 @@ import json
 from typing import AsyncGenerator
 
 import httpx
-from fastapi import APIRouter
+from fastapi import APIRouter, Request
 from fastapi.responses import StreamingResponse
 
 from backend.config import settings
 from backend.models import TranslateRequest
-from backend.services.storage import get_admin_settings, get_server
+from backend.services.storage import get_admin_settings, get_server, log_activity
 
 router = APIRouter(prefix="/translate", tags=["translate"])
 
@@ -135,9 +135,21 @@ async def stream_translation(
         yield f"data: {json.dumps({'type': 'error', 'content': str(e)})}\n\n"
 
 
+def get_client_ip(request: Request) -> str:
+    """Extract client IP from request."""
+    forwarded = request.headers.get("X-Forwarded-For")
+    if forwarded:
+        return forwarded.split(",")[0].strip()
+    return request.client.host if request.client else "127.0.0.1"
+
+
 @router.post("")
-async def translate_text(data: TranslateRequest):
+async def translate_text(data: TranslateRequest, request: Request):
     """Translate text and stream the response."""
+    ip = get_client_ip(request)
+    source_name = LANGUAGE_NAMES.get(data.source_lang, data.source_lang)
+    target_name = LANGUAGE_NAMES.get(data.target_lang, data.target_lang)
+    await log_activity(ip, "translate", f"Translated from {source_name} to {target_name}")
     return StreamingResponse(
         stream_translation(data.text, data.source_lang, data.target_lang),
         media_type="text/event-stream",

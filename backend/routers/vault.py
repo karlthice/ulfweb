@@ -16,6 +16,7 @@ from backend.models import (
     VaultRecordUpdate,
 )
 from backend.services import storage
+from backend.services.storage import log_activity
 
 router = APIRouter(prefix="/vault", tags=["vault"])
 
@@ -45,7 +46,7 @@ async def create_case(data: VaultCaseCreate, request: Request):
     """Create a new vault case."""
     ip = get_client_ip(request)
     user_id = await storage.get_or_create_user(ip)
-    return await storage.create_vault_case(
+    case = await storage.create_vault_case(
         user_id=user_id,
         identifier=data.identifier,
         name=data.name,
@@ -53,6 +54,8 @@ async def create_case(data: VaultCaseCreate, request: Request):
         is_public=data.is_public,
         owner_ip=ip,
     )
+    await log_activity(ip, "vault.case.create", f"Created case '{data.name}' ({data.identifier})", user_id)
+    return case
 
 
 @router.get("/cases/search", response_model=list[VaultCase])
@@ -84,6 +87,7 @@ async def update_case(case_id: int, data: VaultCaseUpdate, request: Request):
     case = await storage.update_vault_case(case_id, user_id, updates)
     if not case:
         raise HTTPException(status_code=404, detail="Case not found or not owner")
+    await log_activity(ip, "vault.case.update", f"Updated case '{case.name}'", user_id)
     return case
 
 
@@ -105,6 +109,7 @@ async def delete_case(case_id: int, request: Request):
     deleted = await storage.delete_vault_case(case_id, user_id)
     if not deleted:
         raise HTTPException(status_code=404, detail="Case not found or not owner")
+    await log_activity(ip, "vault.case.delete", f"Deleted case {case_id}", user_id)
     return {"status": "deleted"}
 
 
@@ -169,6 +174,7 @@ async def add_record(
     # Generate case AI summary in background (regenerate from all records)
     background_tasks.add_task(generate_case_ai_summary, case_id)
 
+    await log_activity(ip, "vault.record.add", f"Added {record_type} record to case {case_id}", user_id)
     return record
 
 
@@ -224,6 +230,7 @@ async def delete_record(record_id: int, request: Request, background_tasks: Back
     # Regenerate case AI summary after deletion
     background_tasks.add_task(generate_case_ai_summary, case_id)
 
+    await log_activity(ip, "vault.record.delete", f"Deleted record {record_id} from case {case_id}", user_id)
     return {"status": "deleted"}
 
 
@@ -264,6 +271,7 @@ async def update_record(record_id: int, data: VaultRecordUpdate, request: Reques
     updated = await storage.update_vault_record(record_id, updates)
     if not updated:
         raise HTTPException(status_code=404, detail="Record not found")
+    await log_activity(ip, "vault.record.update", f"Updated record {record_id}", user_id)
     return updated
 
 
@@ -299,6 +307,7 @@ async def search_records(q: str, request: Request, case_id: int | None = None):
     ip = get_client_ip(request)
     user_id = await storage.get_or_create_user(ip)
     results = await storage.search_vault_records(user_id, q, case_id)
+    await log_activity(ip, "vault.search", f"Searched vault for '{q}'", user_id)
     return results
 
 

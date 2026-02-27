@@ -412,6 +412,65 @@
     margin: 0;
 }
 
+/* Log viewer button */
+.log-btn {
+    padding: 0.5rem 0.75rem;
+    background: var(--bg-primary);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    color: var(--text-secondary);
+    font-size: 0.85rem;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.log-btn:hover {
+    border-color: var(--accent);
+    color: var(--accent);
+}
+
+/* Log viewer modal */
+.log-viewer-modal-content {
+    max-width: 800px;
+}
+
+.log-viewer-header-actions {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.log-refresh-btn {
+    padding: 0.4rem 0.8rem;
+    background: var(--bg-secondary);
+    color: var(--text-primary);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    font-size: 0.8rem;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.log-refresh-btn:hover {
+    border-color: var(--accent);
+    color: var(--accent);
+}
+
+.log-viewer-body {
+    background: #1a1a2e;
+    color: #e0e0e0;
+    font-family: monospace;
+    font-size: 0.8rem;
+    line-height: 1.5;
+    padding: 1rem;
+    border-radius: 8px;
+    max-height: 70vh;
+    overflow: auto;
+    white-space: pre-wrap;
+    word-break: break-all;
+    margin: 0;
+}
+
 /* System Info button */
 .system-info-btn {
     padding: 0.5rem 1rem;
@@ -543,4 +602,153 @@
 
 .sysinfo-mode-badge.ram_only {
     background: #3b82f6;
+}
+
+/* Activity Log Modal */
+.activity-log-modal-content {
+    max-width: 900px;
+}
+
+.activity-log-filters {
+    display: flex;
+    gap: 0.75rem;
+    margin-bottom: 1rem;
+}
+
+.activity-log-input,
+.activity-log-select {
+    padding: 0.5rem 0.75rem;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    color: var(--text-primary);
+    font-family: inherit;
+    font-size: 0.85rem;
+}
+
+.activity-log-input {
+    flex: 1;
+}
+
+.activity-log-ip-input {
+    max-width: 150px;
+    flex: 0 0 auto;
+}
+
+.activity-log-select {
+    min-width: 160px;
+}
+
+.activity-log-input:focus,
+.activity-log-select:focus {
+    outline: none;
+    border-color: var(--accent);
+}
+
+.activity-log-table-wrap {
+    max-height: 60vh;
+    overflow: auto;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+}
+
+.activity-log-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.85rem;
+}
+
+.activity-log-table thead {
+    position: sticky;
+    top: 0;
+    z-index: 1;
+}
+
+.activity-log-table th {
+    background: var(--bg-secondary);
+    color: var(--text-secondary);
+    font-weight: 600;
+    text-align: left;
+    padding: 0.6rem 0.75rem;
+    border-bottom: 1px solid var(--border);
+    white-space: nowrap;
+}
+
+.activity-log-table td {
+    padding: 0.5rem 0.75rem;
+    border-bottom: 1px solid var(--border);
+    color: var(--text-primary);
+}
+
+.activity-log-table tbody tr:hover {
+    background: var(--bg-secondary);
+}
+
+.activity-log-time {
+    white-space: nowrap;
+    color: var(--text-secondary);
+    font-size: 0.8rem;
+}
+
+.activity-log-ip {
+    font-family: monospace;
+    font-size: 0.8rem;
+    white-space: nowrap;
+}
+
+.activity-log-badge {
+    display: inline-block;
+    padding: 0.15rem 0.5rem;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    font-size: 0.75rem;
+    font-family: monospace;
+    white-space: nowrap;
+}
+
+.activity-log-empty {
+    text-align: center;
+    color: var(--text-muted);
+    padding: 2rem 1rem;
+    font-style: italic;
+}
+
+.activity-log-pagination {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 1rem;
+    margin-top: 0.75rem;
+}
+
+.activity-log-page-btn {
+    padding: 0.4rem 0.8rem;
+    background: var(--bg-secondary);
+    color: var(--text-primary);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    font-size: 0.8rem;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.activity-log-page-btn:hover:not(:disabled) {
+    border-color: var(--accent);
+    color: var(--accent);
+}
+
+.activity-log-page-btn:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+}
+
+.activity-log-page-info {
+    font-size: 0.8rem;
+    color: var(--text-secondary);
+}
+
+.activity-log-total {
+    font-size: 0.8rem;
+    color: var(--text-muted);
 }

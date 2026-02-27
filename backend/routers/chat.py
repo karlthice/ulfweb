@@ -18,6 +18,7 @@ from backend.services.storage import (
     get_user_settings,
     get_vault_case_context,
     list_servers,
+    log_activity,
     touch_conversation,
     update_conversation,
 )
@@ -191,6 +192,7 @@ async def chat(conversation_id: int, data: ChatRequest, request: Request):
     if not conversation:
         raise HTTPException(status_code=404, detail="Conversation not found")
 
+    await log_activity(ip, "chat.message", f"Sent message in conversation {conversation_id}", user_id)
     return StreamingResponse(
         stream_chat_response(conversation_id, user_id, data.content, data.image, data.case_refs),
         media_type="text/event-stream",
