@@ -22,6 +22,19 @@ class STTService:
         "language-and-voice-lab/whisper-large-icelandic-62640-steps-967h-ct2",
     ]
 
+    # Punctuated prompts per language to condition Whisper output style
+    PUNCTUATION_PROMPTS = {
+        "is": "Halló, hvernig hefur þú það? Já, mér líður vel. Við skulum byrja.",
+        "en": "Hello, how are you? Yes, I'm doing well. Let's get started.",
+        "no": "Hei, hvordan har du det? Ja, jeg har det bra. La oss begynne.",
+        "sv": "Hej, hur mår du? Ja, jag mår bra. Låt oss börja.",
+        "da": "Hej, hvordan har du det? Ja, jeg har det godt. Lad os komme i gang.",
+        "de": "Hallo, wie geht es Ihnen? Ja, mir geht es gut. Fangen wir an.",
+        "fr": "Bonjour, comment allez-vous ? Oui, je vais bien. Commençons.",
+        "es": "Hola, ¿cómo estás? Sí, estoy bien. Empecemos.",
+        "it": "Ciao, come stai? Sì, sto bene. Cominciamo.",
+    }
+
     def __init__(self):
         self._model = None
         self._current_model_name: str | None = None
@@ -41,22 +54,33 @@ class STTService:
         import ctranslate2
 
         # Pick optimal settings based on available hardware
+        # Try CUDA first, fall back to CPU if driver is incompatible
+        device = "cpu"
+        compute_type = "int8"
+        extra = {"cpu_threads": os.cpu_count() // 2 or 4}
+
         try:
             ctranslate2.get_supported_compute_types("cuda")
+            # Verify CUDA actually works by loading on it
             device = "cuda"
             compute_type = "float16"
             extra = {}
             print(f"Loading Whisper model: {model_name} (CUDA, float16)")
-        except RuntimeError:
+            self._model = WhisperModel(
+                model_name, device=device, compute_type=compute_type,
+            )
+        except (RuntimeError, Exception) as e:
+            if device == "cuda":
+                print(f"CUDA failed ({e}), falling back to CPU")
             device = "cpu"
             compute_type = "int8"
             extra = {"cpu_threads": os.cpu_count() // 2 or 4}
             print(f"Loading Whisper model: {model_name} (CPU, int8, {extra['cpu_threads']} threads)")
+            self._model = WhisperModel(
+                model_name, device=device, compute_type=compute_type,
+                **extra,
+            )
 
-        self._model = WhisperModel(
-            model_name, device=device, compute_type=compute_type,
-            **extra,
-        )
         self._current_model_name = model_name
         self._device = device
         print(f"Whisper model '{model_name}' loaded")
@@ -109,11 +133,13 @@ class STTService:
             if language:
                 kwargs["language"] = language
 
+            prompt = self.PUNCTUATION_PROMPTS.get(language, self.PUNCTUATION_PROMPTS["en"])
+
             segments, info = model.transcribe(
                 wav.name,
                 beam_size=5 if self._device == "cuda" else 1,
                 vad_filter=True,
-                initial_prompt="Hello, how are you? Yes, I'm doing well. Let's get started.",
+                initial_prompt=prompt,
                 **kwargs,
             )
 
@@ -171,11 +197,13 @@ class STTService:
             if language:
                 kwargs["language"] = language
 
+            prompt = self.PUNCTUATION_PROMPTS.get(language, self.PUNCTUATION_PROMPTS["en"])
+
             segments, info = model.transcribe(
                 tmp.name,
                 beam_size=5 if self._device == "cuda" else 1,
                 vad_filter=True,
-                initial_prompt="Hello, how are you? Yes, I'm doing well. Let's get started.",
+                initial_prompt=prompt,
                 **kwargs,
             )
             text_parts = [seg.text for seg in segments]

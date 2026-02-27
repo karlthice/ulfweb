@@ -301,10 +301,15 @@ async def get_server_process_status(server_id: int):
 
 @router.post("/restart")
 async def restart_ulfweb():
-    """Restart the entire ULF Web application."""
+    """Restart the entire ULF Web application.
+
+    Touches main.py to trigger uvicorn's file-change reloader.
+    """
     def _do_restart():
         llama_manager.cleanup()
-        os.execv(sys.executable, [sys.executable] + sys.argv)
+        # Touch a source file to trigger uvicorn's WatchFiles reloader
+        main_py = Path(__file__).parent.parent / "main.py"
+        main_py.touch()
 
     asyncio.get_event_loop().call_later(0.5, _do_restart)
     return {"status": "restarting"}
