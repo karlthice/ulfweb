@@ -2179,6 +2179,43 @@ html, body {
     flex-wrap: wrap;
 }
 
+/* Vault export dropdown menu */
+.vault-export-menu-wrapper {
+    position: relative;
+    display: inline-block;
+}
+
+.vault-export-menu {
+    position: absolute;
+    top: 100%;
+    left: 0;
+    margin-top: 0.25rem;
+    background: var(--bg-primary);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    box-shadow: 0 4px 12px var(--shadow);
+    overflow: hidden;
+    min-width: 140px;
+    z-index: 100;
+}
+
+.vault-export-menu-item {
+    display: block;
+    width: 100%;
+    padding: 0.5rem 1rem;
+    background: none;
+    border: none;
+    color: var(--text-primary);
+    font-size: 0.85rem;
+    cursor: pointer;
+    text-align: left;
+    transition: background 0.2s;
+}
+
+.vault-export-menu-item:hover {
+    background: var(--bg-secondary);
+}
+
 .vault-btn-chat {
     margin-left: auto;
     background: var(--accent);

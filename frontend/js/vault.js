@@ -17,6 +17,15 @@ const vault = {
         document.getElementById('vault-new-case-btn').addEventListener('click', () => this.showCreateForm());
         document.getElementById('vault-search-input').addEventListener('input', (e) => this.handleSearch(e.target.value));
         document.getElementById('vault-back-btn').addEventListener('click', () => this.showCaseList());
+
+        // Close export dropdown when clicking outside
+        document.addEventListener('click', (e) => {
+            const menu = document.getElementById('vault-export-menu');
+            const wrapper = menu?.parentElement;
+            if (menu && wrapper && !wrapper.contains(e.target)) {
+                menu.classList.add('hidden');
+            }
+        });
     },
 
     /**
@@ -204,7 +213,13 @@ const vault = {
                     <option value="private" ${!c.is_public ? 'selected' : ''}>Private</option>
                     <option value="public" ${c.is_public ? 'selected' : ''}>Public</option>
                 </select>
-                <button class="vault-btn vault-btn-secondary" id="vault-export-pdf-btn">Export PDF</button>
+                <div class="vault-export-menu-wrapper">
+                    <button class="vault-btn vault-btn-secondary" id="vault-export-btn">Export</button>
+                    <div class="vault-export-menu hidden" id="vault-export-menu">
+                        <button class="vault-export-menu-item" id="vault-export-pdf-btn">Export PDF</button>
+                        <button class="vault-export-menu-item" id="vault-export-json-btn">Export JSON</button>
+                    </div>
+                </div>
                 <button class="vault-btn vault-btn-danger" id="vault-delete-case-btn">Delete Case</button>
                 <button class="vault-btn vault-btn-chat" id="vault-chat-case-btn">Chat</button>
             </div>
@@ -213,9 +228,22 @@ const vault = {
         document.getElementById('vault-add-record-btn').addEventListener('click', () => this.showAddRecordForm());
         document.getElementById('vault-status-select').addEventListener('change', (e) => this.updateCaseStatus(e.target.value));
         document.getElementById('vault-visibility-select').addEventListener('change', (e) => this.updateCaseVisibility(e.target.value));
+
+        // Export dropdown
+        const exportMenu = document.getElementById('vault-export-menu');
+        document.getElementById('vault-export-btn').addEventListener('click', (e) => {
+            e.stopPropagation();
+            exportMenu.classList.toggle('hidden');
+        });
         document.getElementById('vault-export-pdf-btn').addEventListener('click', () => {
+            exportMenu.classList.add('hidden');
             window.open(api.getVaultCaseExportUrl(this.currentCase.id), '_blank');
         });
+        document.getElementById('vault-export-json-btn').addEventListener('click', () => {
+            exportMenu.classList.add('hidden');
+            window.open(api.getVaultCaseExportJsonUrl(this.currentCase.id), '_blank');
+        });
+
         document.getElementById('vault-delete-case-btn').addEventListener('click', () => this.deleteCase());
         document.getElementById('vault-chat-case-btn').addEventListener('click', () => this.chatAboutCase());
 

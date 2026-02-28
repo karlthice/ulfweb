@@ -19,6 +19,13 @@ class LlamaManager:
     def __init__(self):
         self.processes: dict[int, subprocess.Popen] = {}  # server_id -> process
 
+    @staticmethod
+    def _port_in_use(port: int) -> bool:
+        """Check if a port is already bound by another process."""
+        import socket
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+            return s.connect_ex(("127.0.0.1", port)) == 0
+
     @property
     def _llama_server_path(self) -> str:
         """Get llama-server path from config or environment."""
@@ -106,6 +113,11 @@ class LlamaManager:
         if not port:
             logger.error(f"Server {server_id}: Could not extract port from URL {url}")
             return False
+
+        # Check if port is already in use (e.g. orphaned process from previous run)
+        if self._port_in_use(port):
+            logger.info(f"Server {server_id}: Port {port} already in use, assuming server is running")
+            return True
 
         # Build command
         cmd = [

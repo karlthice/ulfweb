@@ -416,6 +416,10 @@ const api = {
         return `${API_BASE}/vault/cases/${caseId}/export`;
     },
 
+    getVaultCaseExportJsonUrl(caseId) {
+        return `${API_BASE}/vault/cases/${caseId}/export/json`;
+    },
+
     async extractDocumentText(file) {
         const formData = new FormData();
         formData.append('file', file);

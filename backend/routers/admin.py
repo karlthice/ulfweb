@@ -2,8 +2,11 @@
 
 import asyncio
 import os
+import re
 import socket
 import sys
+import time
+from datetime import datetime, timezone
 from pathlib import Path
 
 from fastapi import APIRouter, HTTPException, Request
@@ -23,9 +26,46 @@ from backend.services.storage import (
     update_admin_settings,
     log_activity,
     get_activity_log,
+    get_usage_stats,
 )
 
 router = APIRouter(prefix="/admin", tags=["admin"])
+
+# Regex patterns for split GGUF model files (compiled once at module level)
+_SPLIT_PART_PATTERN = re.compile(r'-0000[2-9]-of-\d+\.gguf$|-000[1-9][0-9]-of-\d+\.gguf$')
+_FIRST_PART_PATTERN = re.compile(r'-00001-of-(\d+)\.gguf$')
+
+
+def _scan_model_files(models_dir: Path) -> list[dict]:
+    """Scan a directory for .gguf model files, combining split model sizes."""
+    results = []
+    for f in models_dir.glob("*.gguf"):
+        if "mmproj" in f.name.lower():
+            continue
+        if _SPLIT_PART_PATTERN.search(f.name):
+            continue
+
+        stat = f.stat()
+        first_part_match = _FIRST_PART_PATTERN.search(f.name)
+        if first_part_match:
+            num_parts = int(first_part_match.group(1))
+            size = 0
+            for i in range(1, num_parts + 1):
+                part_name = _FIRST_PART_PATTERN.sub(f'-{i:05d}-of-{num_parts:05d}.gguf', f.name)
+                try:
+                    size += (models_dir / part_name).stat().st_size
+                except OSError:
+                    pass
+        else:
+            size = stat.st_size
+
+        results.append({
+            "path": f,
+            "name": f.name,
+            "size_bytes": size,
+            "mtime": stat.st_mtime,
+        })
+    return results
 
 
 def _find_free_port() -> int:
@@ -83,8 +123,6 @@ async def system_info():
 @router.get("/models")
 async def get_available_models():
     """List available .gguf model files from the configured models directory."""
-    import re
-
     models_path = settings.models.path
 
     if not models_path:
@@ -94,47 +132,14 @@ async def get_available_models():
     if not models_dir.exists() or not models_dir.is_dir():
         return {"models": [], "configured": True, "error": f"Models directory not found: {models_path}"}
 
-    models = []
     min_size = 100 * 1024 * 1024  # 100 MB
-    # Pattern to match split model parts (e.g., -00002-of-00003.gguf)
-    split_part_pattern = re.compile(r'-0000[2-9]-of-\d+\.gguf$|000[1-9][0-9]-of-\d+\.gguf$')
-    # Pattern to match first part of split models (e.g., -00001-of-00003.gguf)
-    first_part_pattern = re.compile(r'-00001-of-(\d+)\.gguf$')
+    models = [
+        {"filename": m["name"], "path": str(m["path"]), "size_bytes": m["size_bytes"]}
+        for m in _scan_model_files(models_dir)
+        if m["size_bytes"] >= min_size
+    ]
 
-    for gguf_file in models_dir.glob("*.gguf"):
-        # Exclude mmproj files (vision projectors)
-        if "mmproj" in gguf_file.name.lower():
-            continue
-        # Exclude non-first parts of split models (keep only -00001-of-XXXXX)
-        if split_part_pattern.search(gguf_file.name):
-            continue
-
-        # Check if this is a split model (first part)
-        first_part_match = first_part_pattern.search(gguf_file.name)
-        if first_part_match:
-            # Calculate total size across all parts
-            num_parts = int(first_part_match.group(1))
-            size = 0
-            for i in range(1, num_parts + 1):
-                part_name = first_part_pattern.sub(f'-{i:05d}-of-{num_parts:05d}.gguf', gguf_file.name)
-                part_path = models_dir / part_name
-                if part_path.exists():
-                    size += part_path.stat().st_size
-        else:
-            size = gguf_file.stat().st_size
-
-        # Only include models larger than 100 MB
-        if size < min_size:
-            continue
-        models.append({
-            "filename": gguf_file.name,
-            "path": str(gguf_file),
-            "size_bytes": size
-        })
-
-    # Sort by filename
     models.sort(key=lambda m: m["filename"].lower())
-
     return {"models": models, "configured": True}
 
 
@@ -411,3 +416,54 @@ async def get_activity_log_action_types():
         )
         rows = await cursor.fetchall()
         return {"action_types": [row["action_type"] for row in rows]}
+
+
+@router.get("/usage")
+async def get_usage():
+    """Get usage statistics for the admin dashboard."""
+    return await get_usage_stats()
+
+
+@router.get("/file-info")
+async def get_file_info():
+    """Get modification dates and sizes for project and model files."""
+    project_root = Path(__file__).parent.parent.parent
+    now = time.time()
+
+    # Project files: scan backend/ and frontend/ for source files
+    project_files = []
+    extensions = {".py", ".js", ".css", ".html", ".yaml", ".yml"}
+    for subdir in ["backend", "frontend"]:
+        scan_dir = project_root / subdir
+        if not scan_dir.exists():
+            continue
+        for f in scan_dir.rglob("*"):
+            if f.is_file() and f.suffix in extensions and "vendor" not in f.parts:
+                stat = f.stat()
+                project_files.append({
+                    "name": str(f.relative_to(project_root)),
+                    "size_bytes": stat.st_size,
+                    "modified": datetime.fromtimestamp(stat.st_mtime, tz=timezone.utc).isoformat(),
+                    "age_seconds": now - stat.st_mtime,
+                })
+
+    project_files.sort(key=lambda f: f["age_seconds"])
+
+    # Model files: use shared scanner
+    model_files = []
+    models_path = settings.models.path
+    if models_path:
+        models_dir = Path(models_path)
+        if models_dir.exists():
+            model_files = [
+                {
+                    "name": m["name"],
+                    "size_bytes": m["size_bytes"],
+                    "modified": datetime.fromtimestamp(m["mtime"], tz=timezone.utc).isoformat(),
+                    "age_seconds": now - m["mtime"],
+                }
+                for m in _scan_model_files(models_dir)
+            ]
+            model_files.sort(key=lambda f: f["age_seconds"])
+
+    return {"project_files": project_files, "model_files": model_files}

@@ -196,14 +196,71 @@ async def export_case_pdf(case_id: int, request: Request):
     pdf.cell(0, 5, f"Exported {datetime.utcnow().strftime('%Y-%m-%d %H:%M UTC')}", new_x="LMARGIN", new_y="NEXT")
 
     pdf_bytes = pdf.output()
-    safe_name = re.sub(r'[^\w\s-]', '', case.name).strip().replace(' ', '_')
-    filename = f"{safe_name}_{case.identifier}.pdf"
+    filename = _safe_export_filename(case, "pdf")
 
     return Response(
         content=bytes(pdf_bytes),
         media_type="application/pdf",
         headers={"Content-Disposition": f'attachment; filename="{filename}"'},
     )
+
+
+@router.get("/cases/{case_id}/export/json")
+async def export_case_json(case_id: int, request: Request):
+    """Export a case and all its records as a JSON file (text data only, no binary files)."""
+    from datetime import datetime
+    from fastapi.responses import Response
+
+    user = await require_user(request)
+    case = await storage.get_vault_case(case_id, user["id"])
+    if not case:
+        raise HTTPException(status_code=404, detail="Case not found")
+
+    records_out = []
+    for r in (case.records or []):
+        record_data = {
+            "record_type": r.record_type,
+            "title": r.title,
+            "content": r.content,
+            "starred": r.starred,
+            "record_date": r.record_date,
+            "created_at": r.created_at.isoformat() if r.created_at else None,
+        }
+        if r.record_type in ("document", "image"):
+            record_data["original_filename"] = r.original_filename
+            record_data["file_size"] = r.file_size
+        record_data["ai_description"] = r.ai_description
+        records_out.append(record_data)
+
+    export_data = {
+        "case": {
+            "identifier": case.identifier,
+            "name": case.name,
+            "description": case.description,
+            "status": case.status,
+            "is_public": case.is_public,
+            "ai_summary": case.ai_summary,
+            "created_at": case.created_at.isoformat() if case.created_at else None,
+            "updated_at": case.updated_at.isoformat() if case.updated_at else None,
+        },
+        "records": records_out,
+        "exported_at": datetime.utcnow().isoformat() + "Z",
+    }
+
+    json_bytes = json.dumps(export_data, ensure_ascii=False, indent=2).encode("utf-8")
+    filename = _safe_export_filename(case, "json")
+
+    return Response(
+        content=json_bytes,
+        media_type="application/json",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
+def _safe_export_filename(case, extension: str) -> str:
+    """Generate a safe filename for case exports."""
+    safe_name = re.sub(r'[^\w\s-]', '', case.name).strip().replace(' ', '_')
+    return f"{safe_name}_{case.identifier}.{extension}"
 
 
 def _format_size(size_bytes: int | None) -> str:

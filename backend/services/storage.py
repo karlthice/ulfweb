@@ -1253,3 +1253,59 @@ async def get_activity_log(
         entries = [dict(row) for row in rows]
 
         return entries, total
+
+
+async def get_usage_stats() -> dict:
+    """Get usage statistics for the admin dashboard."""
+    async with get_db() as db:
+        # Summary counts (single query)
+        cursor = await db.execute(
+            """SELECT
+                (SELECT COUNT(*) FROM users) as total_users,
+                (SELECT COUNT(DISTINCT user_id) FROM conversations WHERE updated_at >= datetime('now', '-30 days')) as active_users,
+                (SELECT COUNT(*) FROM conversations) as total_conversations,
+                (SELECT COUNT(*) FROM messages) as total_messages,
+                (SELECT COUNT(*) FROM documents) as total_documents,
+                (SELECT COUNT(*) FROM vault_cases) as total_vault_cases,
+                (SELECT COUNT(*) FROM vault_records) as total_vault_records"""
+        )
+        summary = dict(await cursor.fetchone())
+
+        # Per-user breakdown
+        cursor = await db.execute(
+            """SELECT u.username, COUNT(DISTINCT c.id) as conversation_count,
+                      COUNT(m.id) as message_count,
+                      MAX(m.created_at) as last_active
+               FROM users u
+               LEFT JOIN conversations c ON c.user_id = u.id
+               LEFT JOIN messages m ON m.conversation_id = c.id
+               GROUP BY u.id
+               ORDER BY message_count DESC"""
+        )
+        per_user = [dict(row) for row in await cursor.fetchall()]
+
+        # Messages per day (last 30 days)
+        cursor = await db.execute(
+            """SELECT DATE(created_at) as day, COUNT(*) as count
+               FROM messages
+               WHERE created_at >= datetime('now', '-30 days')
+               GROUP BY DATE(created_at)
+               ORDER BY day"""
+        )
+        messages_per_day = [dict(row) for row in await cursor.fetchall()]
+
+        # Feature usage from activity log
+        cursor = await db.execute(
+            """SELECT action_type, COUNT(*) as count
+               FROM activity_log
+               GROUP BY action_type
+               ORDER BY count DESC"""
+        )
+        feature_usage = [dict(row) for row in await cursor.fetchall()]
+
+        return {
+            "summary": summary,
+            "per_user": per_user,
+            "messages_per_day": messages_per_day,
+            "feature_usage": feature_usage,
+        }

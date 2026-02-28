@@ -107,6 +107,8 @@ const admin = {
                 this.closeSystemInfoModal();
                 this.closeLogViewer();
                 this.closeActivityLogModal();
+                this.closeModal('usage-modal');
+                this.closeModal('file-info-modal');
             }
         });
 
@@ -189,6 +191,16 @@ const admin = {
         document.getElementById('single-user-select').addEventListener('change', (e) => {
             this.saveDocumentAiSetting('single_user', e.target.value);
         });
+
+        // Usage
+        document.getElementById('usage-btn').addEventListener('click', () => this.openUsageModal());
+        document.getElementById('close-usage-modal').addEventListener('click', () => this.closeModal('usage-modal'));
+        document.getElementById('usage-modal-overlay').addEventListener('click', () => this.closeModal('usage-modal'));
+
+        // File info
+        document.getElementById('file-info-btn').addEventListener('click', () => this.openFileInfoModal());
+        document.getElementById('close-file-info-modal').addEventListener('click', () => this.closeModal('file-info-modal'));
+        document.getElementById('file-info-modal-overlay').addEventListener('click', () => this.closeModal('file-info-modal'));
 
         // User management
         document.getElementById('user-mgmt-btn').addEventListener('click', () => this.openUserMgmtModal());
@@ -346,12 +358,6 @@ const admin = {
         } catch (e) {
             console.error('Failed to populate single user dropdown:', e);
         }
-    },
-
-    escapeHtml(text) {
-        const div = document.createElement('div');
-        div.textContent = text;
-        return div.innerHTML;
     },
 
     /**
@@ -1386,6 +1392,156 @@ const admin = {
     activityLogPage(newOffset) {
         this.activityLogState.offset = Math.max(0, newOffset);
         this.loadActivityLog();
+    },
+
+    async openUsageModal() {
+        document.getElementById('usage-modal').classList.remove('hidden');
+        document.getElementById('usage-body').innerHTML = '<p>Loading...</p>';
+        try {
+            const res = await fetch(`${API_BASE}/admin/usage`);
+            if (!res.ok) throw new Error('Failed to load usage stats');
+            const data = await res.json();
+            this.renderUsageStats(data);
+        } catch (e) {
+            document.getElementById('usage-body').innerHTML = `<p style="color:var(--error)">Error: ${this.escapeHtml(e.message)}</p>`;
+        }
+    },
+
+    renderUsageCard(label, value) {
+        return `<div class="usage-card">
+            <div class="usage-card-value">${this.escapeHtml(String(value))}</div>
+            <div class="usage-card-label">${this.escapeHtml(label)}</div>
+        </div>`;
+    },
+
+    renderUsageStats(data) {
+        const body = document.getElementById('usage-body');
+        const s = data.summary;
+        let html = '';
+
+        // Summary cards
+        html += '<div class="usage-cards">';
+        html += this.renderUsageCard('Total Users', s.total_users);
+        html += this.renderUsageCard('Active (30d)', s.active_users);
+        html += this.renderUsageCard('Conversations', s.total_conversations);
+        html += this.renderUsageCard('Messages', s.total_messages);
+        html += this.renderUsageCard('Documents', s.total_documents);
+        html += this.renderUsageCard('Vault Cases', s.total_vault_cases);
+        html += '</div>';
+
+        // Messages per day chart
+        if (data.messages_per_day.length > 0) {
+            html += '<h3 class="usage-section-title">Messages per Day (Last 30 Days)</h3>';
+            const maxCount = Math.max(...data.messages_per_day.map(d => d.count));
+            html += '<div class="usage-chart">';
+            for (const d of data.messages_per_day) {
+                const pct = maxCount > 0 ? (d.count / maxCount) * 100 : 0;
+                const label = d.day.slice(5); // MM-DD
+                html += `<div class="usage-chart-bar-wrap" title="${this.escapeHtml(d.day)}: ${d.count}">
+                    <div class="usage-chart-bar" style="height:${pct}%"></div>
+                    <div class="usage-chart-label">${this.escapeHtml(label)}</div>
+                </div>`;
+            }
+            html += '</div>';
+        }
+
+        // Per-user table
+        if (data.per_user.length > 0) {
+            html += '<h3 class="usage-section-title">Per-User Breakdown</h3>';
+            html += '<div class="activity-log-table-wrap"><table class="activity-log-table"><thead><tr>';
+            html += '<th>Username</th><th>Conversations</th><th>Messages</th><th>Last Active</th>';
+            html += '</tr></thead><tbody>';
+            for (const u of data.per_user) {
+                const lastActive = u.last_active ? new Date(u.last_active + 'Z').toLocaleString() : '-';
+                html += `<tr>
+                    <td>${this.escapeHtml(u.username)}</td>
+                    <td>${u.conversation_count}</td>
+                    <td>${u.message_count}</td>
+                    <td class="activity-log-time">${this.escapeHtml(lastActive)}</td>
+                </tr>`;
+            }
+            html += '</tbody></table></div>';
+        }
+
+        // Feature usage
+        if (data.feature_usage.length > 0) {
+            html += '<h3 class="usage-section-title">Feature Usage</h3>';
+            // Group by prefix (part before first '.')
+            const groups = {};
+            for (const f of data.feature_usage) {
+                const dotIdx = f.action_type.indexOf('.');
+                const prefix = dotIdx > 0 ? f.action_type.slice(0, dotIdx) : f.action_type;
+                if (!groups[prefix]) groups[prefix] = { total: 0, items: [] };
+                groups[prefix].total += f.count;
+                groups[prefix].items.push(f);
+            }
+            html += '<div class="usage-feature-grid">';
+            for (const [name, group] of Object.entries(groups)) {
+                html += `<div class="usage-feature-card">
+                    <div class="usage-feature-name">${this.escapeHtml(name)}</div>
+                    <div class="usage-feature-count">${group.total}</div>`;
+                for (const item of group.items) {
+                    html += `<div class="usage-feature-detail">${this.escapeHtml(item.action_type)} <span>${item.count}</span></div>`;
+                }
+                html += '</div>';
+            }
+            html += '</div>';
+        }
+
+        body.innerHTML = html;
+    },
+
+    formatAge(seconds) {
+        const days = Math.floor(seconds / 86400);
+        if (days > 365) return Math.floor(days / 365) + 'y ' + (days % 365) + 'd';
+        if (days > 0) return days + 'd';
+        const hours = Math.floor(seconds / 3600);
+        if (hours > 0) return hours + 'h';
+        return Math.floor(seconds / 60) + 'm';
+    },
+
+    formatDate(iso) {
+        const d = new Date(iso);
+        return d.toLocaleDateString() + ' ' + d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    },
+
+    renderFileTable(title, files) {
+        if (files.length === 0) return '';
+        let html = `<h3 class="fileinfo-subtitle">${this.escapeHtml(title)}</h3>`;
+        html += '<table class="fileinfo-table"><thead><tr><th>File</th><th>Size</th><th>Modified</th><th>Age</th></tr></thead><tbody>';
+        for (const f of files) {
+            html += `<tr>
+                <td class="fileinfo-name">${this.escapeHtml(f.name)}</td>
+                <td class="fileinfo-size">${this.formatBytes(f.size_bytes)}</td>
+                <td class="fileinfo-date">${this.formatDate(f.modified)}</td>
+                <td class="fileinfo-age">${this.formatAge(f.age_seconds)}</td>
+            </tr>`;
+        }
+        html += '</tbody></table>';
+        return html;
+    },
+
+    /**
+     * Open file information modal (project and model files)
+     */
+    async openFileInfoModal() {
+        document.getElementById('file-info-modal').classList.remove('hidden');
+        const container = document.getElementById('file-info-body');
+        container.innerHTML = '<p>Loading...</p>';
+        try {
+            const resp = await fetch(`${API_BASE}/admin/file-info`);
+            if (!resp.ok) throw new Error('Failed to load file info');
+            const data = await resp.json();
+
+            let html = this.renderFileTable('Model Files', data.model_files)
+                     + this.renderFileTable('Project Files', data.project_files);
+
+            if (!html) html = '<p class="setting-hint">No files found.</p>';
+            container.innerHTML = html;
+        } catch (e) {
+            console.error('Failed to load file info:', e);
+            container.innerHTML = '<p class="setting-hint">Failed to load file information.</p>';
+        }
     }
 };
 

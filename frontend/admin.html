@@ -16,6 +16,8 @@
                 <span>ULF web - Admin</span>
             </div>
             <div class="header-actions">
+                <button class="system-info-btn" id="usage-btn">Usage</button>
+                <button class="system-info-btn" id="file-info-btn">System Files</button>
                 <button class="system-info-btn" id="user-mgmt-btn">Users</button>
                 <button class="system-info-btn" id="activity-log-btn">User Logs</button>
                 <button class="system-info-btn" id="system-info-btn">System Info</button>
@@ -459,6 +461,34 @@
             </div>
             <div class="modal-footer">
                 <button class="save-btn" id="save-set-password-btn">Set Password</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Usage Modal -->
+    <div class="modal hidden" id="usage-modal">
+        <div class="modal-overlay" id="usage-modal-overlay"></div>
+        <div class="modal-content usage-modal-content">
+            <div class="modal-header">
+                <h2>Usage Statistics</h2>
+                <button class="close-btn" id="close-usage-modal">&times;</button>
+            </div>
+            <div class="modal-body" id="usage-body">
+                <p>Loading...</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- File Info Modal -->
+    <div class="modal hidden" id="file-info-modal">
+        <div class="modal-overlay" id="file-info-modal-overlay"></div>
+        <div class="modal-content file-info-modal-content">
+            <div class="modal-header">
+                <h2>System Files</h2>
+                <button class="close-btn" id="close-file-info-modal">&times;</button>
+            </div>
+            <div class="modal-body" id="file-info-body">
+                <p>Loading...</p>
             </div>
         </div>
     </div>
