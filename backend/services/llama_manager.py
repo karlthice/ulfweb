@@ -42,11 +42,8 @@ class LlamaManager:
         model_name = Path(model_path).stem
         # Handle split model names (e.g., Qwen3-Coder-Next-Q6_K-00001-of-00002)
         model_name = re.sub(r'-\d{5}-of-\d{5}$', '', model_name)
-        # Remove quantization suffix
-        for suffix in ['-Q4_K_M', '-Q4_K_S', '-Q5_K_M', '-Q5_K_S', '-Q6_K', '-Q8_0', '-F16', '-F32']:
-            if model_name.endswith(suffix):
-                model_name = model_name[:-len(suffix)]
-                break
+        # Remove quantization suffix (including UD- prefix and _XL/_L/_S variants)
+        model_name = re.sub(r'(-UD)?-(Q[0-9]+_K(_[A-Z]+)?|Q[0-9]+_[0-9]+|IQ[0-9]_[A-Z]+|MXFP[0-9]_MOE|F16|F32|BF16)$', '', model_name)
         return model_name
 
     def _find_mmproj_file(self, model_path: str) -> str | None:
@@ -120,11 +117,14 @@ class LlamaManager:
             "-c", str(ctx_size),
             "--jinja",           # Enable Jinja template processing (required for tool calling)
             "--flash-attn", "on", # Flash attention for better performance
+            "--cache-type-k", "q8_0",  # Quantized KV cache for lower VRAM usage
+            "--cache-type-v", "q8_0",  # and higher throughput
             "--reasoning-budget", "0",  # Disable thinking/reasoning tokens by default
             "--min-p", "0.01",   # Min-p sampling (Unsloth recommended, llama.cpp default 0.05 is wrong)
             "--temp", "1.0",     # Temperature (Unsloth recommended for Qwen3)
             "--top-p", "0.95",   # Top-p sampling
             "--top-k", "40",     # Top-k sampling
+            "-ngl", "99",        # Offload all layers to GPU
         ]
 
         # Check for vision model (mmproj file)
