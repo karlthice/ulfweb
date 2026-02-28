@@ -8,6 +8,7 @@ const meeting = {
     isProcessing: false,
     sessionId: null,
     chunkIndex: 0,
+    pendingUploads: [],
     recordingStartTime: null,
     timerInterval: null,
     audioContext: null,
@@ -150,6 +151,7 @@ const meeting = {
             const { session_id } = await resp.json();
             this.sessionId = session_id;
             this.chunkIndex = 0;
+            this.pendingUploads = [];
 
             const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
 
@@ -161,12 +163,16 @@ const meeting = {
 
             this.mediaRecorder.ondataavailable = (e) => {
                 if (e.data.size > 0) {
-                    this.uploadChunk(e.data);
+                    const p = this.uploadChunk(e.data);
+                    this.pendingUploads.push(p);
                 }
             };
 
-            this.mediaRecorder.onstop = () => {
+            this.mediaRecorder.onstop = async () => {
                 stream.getTracks().forEach(track => track.stop());
+                // Wait for all chunk uploads to finish before finalizing
+                await Promise.all(this.pendingUploads);
+                this.pendingUploads = [];
                 this.finalize();
             };
 
