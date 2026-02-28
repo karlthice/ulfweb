@@ -7,6 +7,7 @@ import httpx
 from fastapi import APIRouter, Request
 from fastapi.responses import StreamingResponse
 
+from backend.auth import get_client_ip, require_user
 from backend.config import settings
 from backend.models import TranslateRequest
 from backend.services.storage import get_admin_settings, get_server, log_activity
@@ -65,6 +66,7 @@ async def stream_translation(
         "messages": [{"role": "user", "content": prompt}],
         "stream": True,
         "max_tokens": max(256, len(text) * 3),
+        "reasoning_budget": 0,
     }
 
     try:
@@ -83,6 +85,7 @@ async def stream_translation(
                 # Buffer to detect special tokens that may be split across chunks
                 token_buffer = ""
                 stop_streaming = False
+                in_think = False  # Track <think>...</think> blocks
 
                 async for line in response.aiter_lines():
                     if not line or stop_streaming:
@@ -104,6 +107,36 @@ async def stream_translation(
                                     # Add to buffer to detect special tokens
                                     token_buffer += content
 
+                                    # Strip <think>...</think> blocks (reasoning models)
+                                    while "<think>" in token_buffer:
+                                        before = token_buffer[:token_buffer.find("<think>")]
+                                        after = token_buffer[token_buffer.find("<think>") + 7:]
+                                        if "</think>" in after:
+                                            token_buffer = before + after[after.find("</think>") + 8:]
+                                        else:
+                                            # Still inside think block - send what's before it
+                                            if before:
+                                                yield f"data: {json.dumps({'type': 'content', 'content': before})}\n\n"
+                                            token_buffer = after
+                                            in_think = True
+                                            break
+
+                                    # If inside a think block, look for closing tag
+                                    if in_think:
+                                        if "</think>" in token_buffer:
+                                            token_buffer = token_buffer[token_buffer.find("</think>") + 8:]
+                                            in_think = False
+                                        else:
+                                            # Discard buffered think content, keep tail for partial tag
+                                            token_buffer = token_buffer[-8:] if len(token_buffer) > 8 else token_buffer
+                                            continue
+
+                                    # Strip stray </think> tags
+                                    token_buffer = token_buffer.replace("</think>", "")
+
+                                    if in_think:
+                                        continue
+
                                     # Check if buffer contains start of special token
                                     if "<|" in token_buffer:
                                         # Output everything before the special token
@@ -124,7 +157,7 @@ async def stream_translation(
                             continue
 
                 # Flush remaining buffer if no special token detected
-                if token_buffer and not stop_streaming and "<|" not in token_buffer:
+                if token_buffer and not stop_streaming and not in_think and "<|" not in token_buffer:
                     yield f"data: {json.dumps({'type': 'content', 'content': token_buffer})}\n\n"
 
         yield f"data: {json.dumps({'type': 'done'})}\n\n"
@@ -135,17 +168,10 @@ async def stream_translation(
         yield f"data: {json.dumps({'type': 'error', 'content': str(e)})}\n\n"
 
 
-def get_client_ip(request: Request) -> str:
-    """Extract client IP from request."""
-    forwarded = request.headers.get("X-Forwarded-For")
-    if forwarded:
-        return forwarded.split(",")[0].strip()
-    return request.client.host if request.client else "127.0.0.1"
-
-
 @router.post("")
 async def translate_text(data: TranslateRequest, request: Request):
     """Translate text and stream the response."""
+    await require_user(request)
     ip = get_client_ip(request)
     source_name = LANGUAGE_NAMES.get(data.source_lang, data.source_lang)
     target_name = LANGUAGE_NAMES.get(data.target_lang, data.target_lang)
