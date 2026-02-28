@@ -213,7 +213,7 @@ async def delete_record(record_id: int, request: Request, background_tasks: Back
         raise HTTPException(status_code=403, detail="Not authorized")
     # Allow case owner or record creator to delete
     if case.user_id != user_id and record.created_by_user_id != user_id:
-        raise HTTPException(status_code=403, detail="Not authorized")
+        raise HTTPException(status_code=403, detail="Only the case owner or record creator can delete records")
 
     case_id = record.case_id
 
@@ -327,6 +327,7 @@ async def generate_case_ai_summary(case_id: int):
                 return
 
             case_info = dict(case_row)
+            case_label = f"'{case_info['name']}' ({case_info['identifier']})"
 
             cursor = await db.execute(
                 """SELECT record_type, title, content, ai_description, record_date
@@ -345,10 +346,12 @@ async def generate_case_ai_summary(case_id: int):
         admin_settings = await storage.get_admin_settings()
         server_id = admin_settings.vault_text_server_id
         if not server_id:
+            await log_activity("system", "vault.summary.skip", f"No text server configured, skipped summary for case {case_label}")
             return
 
         server = await storage.get_server(server_id)
         if not server or not server.active:
+            await log_activity("system", "vault.summary.skip", f"Text server not available, skipped summary for case {case_label}")
             return
 
         # Build record context
@@ -363,8 +366,9 @@ async def generate_case_ai_summary(case_id: int):
             )
 
         prompt = (
-            f"Summarize this case in 200-300 words based on the records below. "
-            f"Include key dates, events, and current status.\n\n"
+            f"Write a brief factual summary of this case. State only what the records say — "
+            f"no interpretation, no speculation, no filler. Use short sentences. "
+            f"List key dates and facts. 150 words maximum.\n\n"
             f"Case: {case_info['name']} ({case_info['identifier']})\n"
             f"Description: {case_info['description'] or 'N/A'}\n\n"
             f"Records (chronological):\n" + "\n".join(record_lines)
@@ -387,13 +391,15 @@ async def generate_case_ai_summary(case_id: int):
                 data = response.json()
                 if "choices" in data and data["choices"]:
                     summary = data["choices"][0]["message"]["content"]
+                    summary = _clean_llm_output(summary)
                     await storage.update_vault_case_ai_summary(case_id, summary)
+                    await log_activity("system", "vault.summary.ok", f"Generated summary for case {case_label} ({len(records)} records)")
+                    return
+
+            await log_activity("system", "vault.summary.fail", f"LLM returned status {response.status_code} for case {case_label}")
 
     except Exception as e:
-        import logging
-        logging.getLogger(__name__).warning(
-            f"Failed to generate AI summary for case {case_id}: {e}"
-        )
+        await log_activity("system", "vault.summary.fail", f"Failed to generate summary for case {case_id}: {e}")
 
 
 async def generate_ai_description(
@@ -403,6 +409,7 @@ async def generate_ai_description(
     original_filename: str | None,
 ):
     """Background task: generate AI description for document/image records."""
+    file_label = original_filename or f"record {record_id}"
     try:
         admin_settings = await storage.get_admin_settings()
 
@@ -412,16 +419,19 @@ async def generate_ai_description(
         else:
             server_id = admin_settings.vault_text_server_id
         if not server_id:
+            await log_activity("system", "vault.description.skip", f"No {record_type} server configured, skipped description for '{file_label}'")
             return
 
         server = await storage.get_server(server_id)
         if not server or not server.active:
+            await log_activity("system", "vault.description.skip", f"Server not available, skipped description for '{file_label}'")
             return
 
         if record_type == "document" and file_path.suffix.lower() == ".pdf":
             # Extract text from PDF
             text = await _extract_pdf_text(file_path)
             if not text:
+                await log_activity("system", "vault.description.fail", f"Could not extract text from '{file_label}'")
                 return
             # Truncate for LLM
             text = text[:8000]
@@ -470,12 +480,28 @@ async def generate_ai_description(
                 data = response.json()
                 if "choices" in data and data["choices"]:
                     description = data["choices"][0]["message"]["content"]
+                    description = _clean_llm_output(description)
                     await storage.update_vault_record_ai_description(record_id, description)
+                    await log_activity("system", "vault.description.ok", f"Generated description for '{file_label}'")
+                    return
+
+            await log_activity("system", "vault.description.fail", f"LLM returned status {response.status_code} for '{file_label}'")
 
     except Exception as e:
-        # Log but don't fail - AI description is optional
-        import logging
-        logging.getLogger(__name__).warning(f"Failed to generate AI description for record {record_id}: {e}")
+        await log_activity("system", "vault.description.fail", f"Failed to generate description for '{file_label}': {e}")
+
+
+import re
+
+def _clean_llm_output(text: str) -> str:
+    """Strip thinking tags and duplicated content from LLM output."""
+    # Remove <think>...</think> blocks (reasoning models)
+    text = re.sub(r"<think>.*?</think>", "", text, flags=re.DOTALL)
+    # Remove stray closing </think> tags
+    text = re.sub(r"</think>\s*", "", text)
+    # Remove (Word count: N) artifacts
+    text = re.sub(r"\(Word count:\s*\d+\)\s*", "", text)
+    return text.strip()
 
 
 async def _extract_pdf_text(file_path: Path) -> str:

@@ -214,7 +214,10 @@ const api = {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(updates)
         });
-        if (!response.ok) throw new Error('Failed to update case');
+        if (!response.ok) {
+            const data = await response.json().catch(() => ({}));
+            throw new Error(data.detail || 'Failed to update case');
+        }
         return response.json();
     },
 
@@ -222,7 +225,10 @@ const api = {
         const response = await fetch(`${API_BASE}/vault/cases/${id}`, {
             method: 'DELETE'
         });
-        if (!response.ok) throw new Error('Failed to delete case');
+        if (!response.ok) {
+            const data = await response.json().catch(() => ({}));
+            throw new Error(data.detail || 'Failed to delete case');
+        }
         return true;
     },
 
@@ -248,7 +254,10 @@ const api = {
         const response = await fetch(`${API_BASE}/vault/records/${recordId}/star`, {
             method: 'PUT'
         });
-        if (!response.ok) throw new Error('Failed to toggle star');
+        if (!response.ok) {
+            const data = await response.json().catch(() => ({}));
+            throw new Error(data.detail || 'Failed to toggle star');
+        }
         return response.json();
     },
 
@@ -269,7 +278,10 @@ const api = {
         const response = await fetch(`${API_BASE}/vault/records/${recordId}`, {
             method: 'DELETE'
         });
-        if (!response.ok) throw new Error('Failed to delete record');
+        if (!response.ok) {
+            const data = await response.json().catch(() => ({}));
+            throw new Error(data.detail || 'Failed to delete record');
+        }
         return true;
     },
 
