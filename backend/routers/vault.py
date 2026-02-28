@@ -401,6 +401,7 @@ async def generate_case_ai_summary(case_id: int):
             "stream": False,
             "temperature": 0.3,
             "max_tokens": 1024,
+            "reasoning_budget": 0,
         }
 
         async with httpx.AsyncClient(timeout=120.0) as client:
@@ -490,6 +491,7 @@ async def generate_ai_description(
             "stream": False,
             "temperature": 0.3,
             "max_tokens": 1024,
+            "reasoning_budget": 0,
         }
 
         async with httpx.AsyncClient(timeout=120.0) as client:

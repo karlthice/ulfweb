@@ -50,22 +50,21 @@ class MeetingSessionManager:
         if not chunks:
             raise ValueError(f"No chunks found for session {session_id}")
 
-        # Create concat list file for ffmpeg
-        concat_list = session_dir / "concat.txt"
-        with open(concat_list, "w") as f:
+        # MediaRecorder timeslice chunks are continuation segments of a single
+        # WebM stream — concatenate raw bytes to form a valid WebM file first
+        combined_webm = session_dir / "combined.webm"
+        with open(combined_webm, "wb") as out:
             for chunk in chunks:
-                f.write(f"file '{chunk.resolve()}'\n")
+                out.write(chunk.read_bytes())
 
         # Output WAV path
         wav_path = session_dir / "assembled.wav"
 
-        # Use ffmpeg concat demuxer to join chunks, convert to 16kHz mono WAV
+        # Convert the single WebM file to 16kHz mono WAV
         result = subprocess.run(
             [
                 "ffmpeg", "-y",
-                "-f", "concat",
-                "-safe", "0",
-                "-i", str(concat_list),
+                "-i", str(combined_webm),
                 "-ar", "16000",
                 "-ac", "1",
                 "-f", "wav",
