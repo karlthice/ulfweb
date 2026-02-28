@@ -20,11 +20,27 @@ class LlamaManager:
         self.processes: dict[int, subprocess.Popen] = {}  # server_id -> process
 
     @staticmethod
-    def _port_in_use(port: int) -> bool:
-        """Check if a port is already bound by another process."""
-        import socket
-        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-            return s.connect_ex(("127.0.0.1", port)) == 0
+    def _kill_port_holder(port: int) -> None:
+        """Kill any process listening on the given port (e.g. orphaned server)."""
+        import signal
+        try:
+            result = subprocess.run(
+                ["fuser", f"{port}/tcp"],
+                capture_output=True, text=True, timeout=5,
+            )
+            pids = result.stdout.strip().split()
+            for pid_str in pids:
+                try:
+                    pid = int(pid_str)
+                    logger.warning(f"Killing orphaned process PID {pid} on port {port}")
+                    os.kill(pid, signal.SIGTERM)
+                except (ValueError, ProcessLookupError):
+                    pass
+            if pids:
+                import time
+                time.sleep(1)
+        except (FileNotFoundError, subprocess.TimeoutExpired):
+            pass
 
     @property
     def _llama_server_path(self) -> str:
@@ -114,10 +130,8 @@ class LlamaManager:
             logger.error(f"Server {server_id}: Could not extract port from URL {url}")
             return False
 
-        # Check if port is already in use (e.g. orphaned process from previous run)
-        if self._port_in_use(port):
-            logger.info(f"Server {server_id}: Port {port} already in use, assuming server is running")
-            return True
+        # Kill any orphaned process on this port from a previous run
+        self._kill_port_holder(port)
 
         # Build command
         cmd = [
@@ -166,6 +180,7 @@ class LlamaManager:
             log_handle = open(log_file, "a")
             proc = subprocess.Popen(
                 cmd,
+                stdin=subprocess.DEVNULL,  # Prevent stdin EOF from triggering shutdown
                 stdout=log_handle,
                 stderr=log_handle,
                 start_new_session=True,  # Detach from parent process group
