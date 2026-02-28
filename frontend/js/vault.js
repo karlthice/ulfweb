@@ -96,10 +96,10 @@ const vault = {
             <input type="text" id="vault-new-name" placeholder="Display name" required>
             <textarea id="vault-new-description" placeholder="Description (optional)" rows="2"></textarea>
             <div class="vault-form-row">
-                <label class="vault-checkbox">
-                    <input type="checkbox" id="vault-new-public">
-                    <span>Public (visible to all users)</span>
-                </label>
+                <select id="vault-new-visibility" class="vault-status-select">
+                    <option value="private" selected>Private</option>
+                    <option value="public">Public</option>
+                </select>
                 <div class="vault-form-actions">
                     <button class="vault-btn vault-btn-secondary" id="vault-create-cancel">Cancel</button>
                     <button class="vault-btn vault-btn-primary" id="vault-create-submit">Create</button>
@@ -118,7 +118,7 @@ const vault = {
         const identifier = document.getElementById('vault-new-identifier').value.trim();
         const name = document.getElementById('vault-new-name').value.trim();
         const description = document.getElementById('vault-new-description').value.trim();
-        const isPublic = document.getElementById('vault-new-public').checked;
+        const isPublic = document.getElementById('vault-new-visibility').value === 'public';
 
         if (!identifier || !name) {
             alert('Identifier and name are required.');
@@ -200,6 +200,10 @@ const vault = {
                     <option value="closed" ${c.status === 'closed' ? 'selected' : ''}>Closed</option>
                     <option value="archived" ${c.status === 'archived' ? 'selected' : ''}>Archived</option>
                 </select>
+                <select id="vault-visibility-select" class="vault-status-select">
+                    <option value="private" ${!c.is_public ? 'selected' : ''}>Private</option>
+                    <option value="public" ${c.is_public ? 'selected' : ''}>Public</option>
+                </select>
                 <button class="vault-btn vault-btn-danger" id="vault-delete-case-btn">Delete Case</button>
                 <button class="vault-btn vault-btn-chat" id="vault-chat-case-btn">Chat</button>
             </div>
@@ -207,6 +211,7 @@ const vault = {
 
         document.getElementById('vault-add-record-btn').addEventListener('click', () => this.showAddRecordForm());
         document.getElementById('vault-status-select').addEventListener('change', (e) => this.updateCaseStatus(e.target.value));
+        document.getElementById('vault-visibility-select').addEventListener('change', (e) => this.updateCaseVisibility(e.target.value));
         document.getElementById('vault-delete-case-btn').addEventListener('click', () => this.deleteCase());
         document.getElementById('vault-chat-case-btn').addEventListener('click', () => this.chatAboutCase());
 
@@ -222,6 +227,16 @@ const vault = {
         }
     },
 
+    async updateCaseVisibility(value) {
+        const isPublic = value === 'public';
+        try {
+            await api.updateVaultCase(this.currentCase.id, { is_public: isPublic });
+            this.currentCase.is_public = isPublic;
+        } catch (error) {
+            console.error('Failed to update visibility:', error);
+        }
+    },
+
     async deleteCase() {
         if (!confirm(`Delete case "${this.currentCase.name}" and all its records? This cannot be undone.`)) return;
         try {
@@ -232,12 +247,15 @@ const vault = {
         }
     },
 
-    chatAboutCase() {
+    async chatAboutCase() {
         const c = this.currentCase;
         if (!c) return;
 
         // Switch to chat tab
         document.getElementById('chat-tab').click();
+
+        // Always start a new conversation for vault case chats
+        await conversations.create();
 
         // Pre-fill @mention with case name and track the case ref
         const input = document.getElementById('message-input');

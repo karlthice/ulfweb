@@ -27,6 +27,11 @@ from backend.services.storage import (
 router = APIRouter(prefix="/chat", tags=["chat"])
 
 
+def _estimate_tokens(text: str) -> int:
+    """Rough character-based token estimate (~4 chars per token)."""
+    return len(text) // 4 + 1
+
+
 async def stream_chat_response(
     conversation_id: int,
     user_id: int,
@@ -41,6 +46,26 @@ async def stream_chat_response(
     # Get conversation messages and user settings
     messages = await get_conversation_messages(conversation_id)
     user_settings = await get_user_settings(user_id)
+
+    # Resolve server early so we can use ctx_size for the token budget
+    server_url = settings.llama.url
+    ctx_budget = 32768  # fallback
+    admin_cfg = await get_admin_settings()
+    if admin_cfg.chat_server_id:
+        server = await get_server(admin_cfg.chat_server_id)
+        if server and server.active:
+            server_url = server.url
+            ctx_budget = server.ctx_size
+        else:
+            active_servers = await list_servers(active_only=True)
+            if active_servers:
+                server_url = active_servers[0].url
+                ctx_budget = active_servers[0].ctx_size
+    else:
+        active_servers = await list_servers(active_only=True)
+        if active_servers:
+            server_url = active_servers[0].url
+            ctx_budget = active_servers[0].ctx_size
 
     # Build messages for llama.cpp API
     llama_messages = []
@@ -62,12 +87,26 @@ async def stream_chat_response(
             "content": "\n\n".join(system_parts)
         })
 
-    # Add conversation history (except the last user message, we'll add it with image if present)
-    for msg in messages[:-1]:  # Exclude last message (it's the current user message)
-        llama_messages.append({
-            "role": msg.role,
-            "content": msg.content
-        })
+    # Sliding window: fit recent history within the server's context budget
+    # Reserve tokens for the response and fixed parts (system prompt + current message)
+    used_tokens = user_settings.max_tokens  # reserve for response
+    if system_parts:
+        used_tokens += _estimate_tokens("\n\n".join(system_parts))
+    used_tokens += _estimate_tokens(user_message)
+
+    remaining = ctx_budget - used_tokens
+
+    # Walk history newest-first (excluding current user message), add what fits
+    history = messages[:-1]  # Exclude last message (it's the current user message)
+    window = []
+    for msg in reversed(history):
+        msg_tokens = _estimate_tokens(msg.content)
+        if msg_tokens > remaining:
+            break
+        remaining -= msg_tokens
+        window.append({"role": msg.role, "content": msg.content})
+    window.reverse()
+    llama_messages.extend(window)
 
     # Add the current user message (with image if present)
     if image_base64:
@@ -96,22 +135,6 @@ async def stream_chat_response(
         "max_tokens": user_settings.max_tokens,
         "reasoning_budget": 0,  # Disable thinking/reasoning tokens
     }
-
-    # Determine server URL from admin setting, fall back to first active server
-    server_url = settings.llama.url
-    admin_cfg = await get_admin_settings()
-    if admin_cfg.chat_server_id:
-        server = await get_server(admin_cfg.chat_server_id)
-        if server and server.active:
-            server_url = server.url
-        else:
-            active_servers = await list_servers(active_only=True)
-            if active_servers:
-                server_url = active_servers[0].url
-    else:
-        active_servers = await list_servers(active_only=True)
-        if active_servers:
-            server_url = active_servers[0].url
 
     assistant_content = ""
 

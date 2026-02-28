@@ -59,10 +59,19 @@ window.currentUser = null;
  * Apply UI visibility based on user permissions
  */
 function applyUserPermissions() {
-    if (!window.currentUser || window.currentUser.usertype !== 'admin') {
+    const isAdmin = window.currentUser && window.currentUser.usertype === 'admin';
+    if (!isAdmin) {
         // Hide settings button
         const settingsBtn = document.getElementById('settings-btn');
         if (settingsBtn) settingsBtn.style.display = 'none';
+    }
+    // Show admin button only for admin users
+    const adminBtn = document.getElementById('admin-btn');
+    if (adminBtn) {
+        adminBtn.style.display = isAdmin ? 'flex' : 'none';
+        adminBtn.addEventListener('click', () => {
+            window.location.href = '/admin';
+        });
     }
 }
 

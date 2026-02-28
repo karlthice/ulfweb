@@ -26,6 +26,9 @@ from backend.models import (
 
 
 # Conversation operations
+MAX_CONVERSATIONS_PER_USER = 50
+
+
 async def list_conversations(user_id: int) -> list[Conversation]:
     """List all conversations for a user, ordered by most recent."""
     async with get_db() as db:
@@ -33,21 +36,33 @@ async def list_conversations(user_id: int) -> list[Conversation]:
             """SELECT id, user_id, title, created_at, updated_at
                FROM conversations
                WHERE user_id = ?
-               ORDER BY updated_at DESC""",
-            (user_id,)
+               ORDER BY updated_at DESC
+               LIMIT ?""",
+            (user_id, MAX_CONVERSATIONS_PER_USER)
         )
         rows = await cursor.fetchall()
         return [Conversation(**dict(row)) for row in rows]
 
 
 async def create_conversation(user_id: int, title: str = "New Conversation") -> Conversation:
-    """Create a new conversation."""
+    """Create a new conversation and clean up oldest ones beyond the limit."""
     async with get_db() as db:
         now = datetime.utcnow()
         cursor = await db.execute(
             """INSERT INTO conversations (user_id, title, created_at, updated_at)
                VALUES (?, ?, ?, ?)""",
             (user_id, title, now, now)
+        )
+        # Delete conversations beyond the limit (cascade deletes their messages)
+        await db.execute(
+            """DELETE FROM conversations
+               WHERE user_id = ? AND id NOT IN (
+                   SELECT id FROM conversations
+                   WHERE user_id = ?
+                   ORDER BY updated_at DESC
+                   LIMIT ?
+               )""",
+            (user_id, user_id, MAX_CONVERSATIONS_PER_USER)
         )
         await db.commit()
 
