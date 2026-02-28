@@ -2,7 +2,7 @@
  * Admin page functionality
  */
 
-const API_BASE = '/api/v1';
+// API_BASE is defined in api.js which is loaded before this script
 
 const admin = {
     servers: [],
@@ -17,7 +17,19 @@ const admin = {
     /**
      * Initialize admin page
      */
-    init() {
+    async init() {
+        // Auth check: require admin
+        try {
+            const mode = await api.getAuthMode();
+            if (!mode.single_user) {
+                const user = await api.getCurrentUser();
+                if (!user) { window.location.href = '/login'; return; }
+                if (user.usertype !== 'admin') { window.location.href = '/'; return; }
+            }
+        } catch (e) {
+            console.error('Auth check failed:', e);
+        }
+
         this.setupEventListeners();
         this.loadModels();
         this.loadServers();
@@ -124,6 +136,9 @@ const admin = {
         document.getElementById('document-ai-understanding-server').addEventListener('change', (e) => {
             this.saveDocumentAiSetting('document_ai_understanding_server_id', e.target.value);
         });
+        document.getElementById('chat-server').addEventListener('change', (e) => {
+            this.saveDocumentAiSetting('chat_server_id', e.target.value);
+        });
         document.getElementById('translation-server').addEventListener('change', (e) => {
             this.saveDocumentAiSetting('translation_server_id', e.target.value);
         });
@@ -166,6 +181,174 @@ const admin = {
         document.getElementById('restart-ulfweb-btn').addEventListener('click', () => {
             this.restartUlfWeb();
         });
+
+        // Single user mode dropdown
+        document.getElementById('single-user-select').addEventListener('change', (e) => {
+            this.saveDocumentAiSetting('single_user', e.target.value);
+        });
+
+        // User management
+        document.getElementById('user-mgmt-btn').addEventListener('click', () => this.openUserMgmtModal());
+        document.getElementById('close-user-mgmt-modal').addEventListener('click', () => this.closeModal('user-mgmt-modal'));
+        document.getElementById('user-mgmt-modal-overlay').addEventListener('click', () => this.closeModal('user-mgmt-modal'));
+
+        document.getElementById('add-user-btn').addEventListener('click', () => this.openUserEditModal());
+        document.getElementById('close-user-edit-modal').addEventListener('click', () => this.closeModal('user-edit-modal'));
+        document.getElementById('user-edit-modal-overlay').addEventListener('click', () => this.closeModal('user-edit-modal'));
+        document.getElementById('save-user-btn').addEventListener('click', () => this.saveUser());
+
+        document.getElementById('close-set-password-modal').addEventListener('click', () => this.closeModal('set-password-modal'));
+        document.getElementById('set-password-modal-overlay').addEventListener('click', () => this.closeModal('set-password-modal'));
+        document.getElementById('save-set-password-btn').addEventListener('click', () => this.saveSetPassword());
+    },
+
+    closeModal(id) {
+        document.getElementById(id).classList.add('hidden');
+    },
+
+    async openUserMgmtModal() {
+        document.getElementById('user-mgmt-modal').classList.remove('hidden');
+        await this.loadUsers();
+    },
+
+    async loadUsers() {
+        try {
+            const users = await api.listUsers();
+            const tbody = document.getElementById('user-mgmt-tbody');
+            tbody.innerHTML = users.map(u => `
+                <tr>
+                    <td>${this.escapeHtml(u.username)}</td>
+                    <td>${u.usertype}</td>
+                    <td>${this.escapeHtml(u.full_name || '')}</td>
+                    <td>
+                        <button class="action-btn" onclick="admin.openUserEditModal(${u.id})">Edit</button>
+                        <button class="action-btn" onclick="admin.openSetPasswordModal(${u.id}, '${this.escapeHtml(u.username)}')">Password</button>
+                        <button class="action-btn delete-btn" onclick="admin.deleteUser(${u.id}, '${this.escapeHtml(u.username)}')">Delete</button>
+                    </td>
+                </tr>
+            `).join('');
+        } catch (e) {
+            console.error('Failed to load users:', e);
+        }
+    },
+
+    async openUserEditModal(userId) {
+        const modal = document.getElementById('user-edit-modal');
+        const title = document.getElementById('user-edit-modal-title');
+        const passwordGroup = document.getElementById('user-edit-password-group');
+        document.getElementById('user-edit-error').textContent = '';
+
+        if (userId) {
+            title.textContent = 'Edit User';
+            passwordGroup.style.display = 'none';
+            try {
+                const users = await api.listUsers();
+                const user = users.find(u => u.id === userId);
+                if (user) {
+                    document.getElementById('user-edit-id').value = user.id;
+                    document.getElementById('user-edit-username').value = user.username;
+                    document.getElementById('user-edit-fullname').value = user.full_name || '';
+                    document.getElementById('user-edit-type').value = user.usertype;
+                }
+            } catch (e) {
+                console.error('Failed to load user:', e);
+            }
+        } else {
+            title.textContent = 'Add User';
+            passwordGroup.style.display = '';
+            document.getElementById('user-edit-id').value = '';
+            document.getElementById('user-edit-username').value = '';
+            document.getElementById('user-edit-password').value = '';
+            document.getElementById('user-edit-fullname').value = '';
+            document.getElementById('user-edit-type').value = 'normal';
+        }
+        modal.classList.remove('hidden');
+    },
+
+    async saveUser() {
+        const errorEl = document.getElementById('user-edit-error');
+        const userId = document.getElementById('user-edit-id').value;
+        const username = document.getElementById('user-edit-username').value.trim();
+        const fullName = document.getElementById('user-edit-fullname').value.trim();
+        const usertype = document.getElementById('user-edit-type').value;
+        errorEl.textContent = '';
+
+        if (!username) { errorEl.textContent = 'Username is required'; return; }
+
+        try {
+            if (userId) {
+                await api.updateUser(parseInt(userId), { username, full_name: fullName, usertype });
+            } else {
+                const password = document.getElementById('user-edit-password').value;
+                if (!password) { errorEl.textContent = 'Password is required'; return; }
+                await api.createUser({ username, password, full_name: fullName, usertype });
+            }
+            this.closeModal('user-edit-modal');
+            await this.loadUsers();
+            // Refresh single-user dropdown
+            this.populateSingleUserDropdown();
+        } catch (e) {
+            errorEl.textContent = e.message;
+        }
+    },
+
+    async deleteUser(userId, username) {
+        if (!confirm(`Delete user "${username}"?`)) return;
+        try {
+            await api.deleteUser(userId);
+            await this.loadUsers();
+            this.populateSingleUserDropdown();
+        } catch (e) {
+            alert(e.message);
+        }
+    },
+
+    openSetPasswordModal(userId, username) {
+        document.getElementById('set-password-user-id').value = userId;
+        document.getElementById('set-password-title').textContent = `Set Password: ${username}`;
+        document.getElementById('set-password-value').value = '';
+        document.getElementById('set-password-error').textContent = '';
+        document.getElementById('set-password-modal').classList.remove('hidden');
+    },
+
+    async saveSetPassword() {
+        const userId = document.getElementById('set-password-user-id').value;
+        const password = document.getElementById('set-password-value').value;
+        const errorEl = document.getElementById('set-password-error');
+        errorEl.textContent = '';
+
+        if (!password) { errorEl.textContent = 'Password is required'; return; }
+
+        try {
+            await api.setUserPassword(parseInt(userId), password);
+            this.closeModal('set-password-modal');
+        } catch (e) {
+            errorEl.textContent = e.message;
+        }
+    },
+
+    async populateSingleUserDropdown() {
+        try {
+            const users = await api.listUsers();
+            const select = document.getElementById('single-user-select');
+            const currentValue = this.adminSettings.single_user || '';
+            select.innerHTML = '<option value="">Disabled (login required)</option>';
+            for (const u of users) {
+                const option = document.createElement('option');
+                option.value = u.username;
+                option.textContent = `${u.username} (${u.usertype})`;
+                if (u.username === currentValue) option.selected = true;
+                select.appendChild(option);
+            }
+        } catch (e) {
+            console.error('Failed to populate single user dropdown:', e);
+        }
+    },
+
+    escapeHtml(text) {
+        const div = document.createElement('div');
+        div.textContent = text;
+        return div.innerHTML;
     },
 
     /**
@@ -816,6 +999,7 @@ const admin = {
             { id: 'document-ai-query-server', setting: 'document_ai_query_server_id' },
             { id: 'document-ai-extraction-server', setting: 'document_ai_extraction_server_id' },
             { id: 'document-ai-understanding-server', setting: 'document_ai_understanding_server_id' },
+            { id: 'chat-server', setting: 'chat_server_id' },
             { id: 'translation-server', setting: 'translation_server_id' },
             { id: 'vault-image-server', setting: 'vault_image_server_id' },
             { id: 'vault-text-server', setting: 'vault_text_server_id' }
@@ -859,6 +1043,9 @@ const admin = {
         if (dateFormatSelect && this.adminSettings.date_format) {
             dateFormatSelect.value = this.adminSettings.date_format;
         }
+
+        // Populate single-user dropdown
+        this.populateSingleUserDropdown();
     },
 
     /**

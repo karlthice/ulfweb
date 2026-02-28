@@ -6,7 +6,6 @@ const chat = {
     conversationId: null,
     messages: [],
     isStreaming: false,
-    servers: [],
     attachedPdfText: null,
     attachedPdfName: null,
     attachedImageBase64: null,
@@ -23,92 +22,9 @@ const chat = {
         this.setupEventListeners();
         this.setupAutoResize();
         this.setupMarked();
-        this.setupServerSelector();
         this.setupAttachment();
         this.setupImageAttachment();
         this.setupMentionAutocomplete();
-        this.loadServers();
-    },
-
-    /**
-     * Load available servers from database
-     */
-    async loadServers() {
-        const serverSelect = document.getElementById('chat-model');
-
-        try {
-            this.servers = await api.getActiveServers();
-
-            // Clear existing options
-            serverSelect.innerHTML = '';
-
-            if (this.servers.length === 0) {
-                serverSelect.innerHTML = '<option value="">No servers configured</option>';
-                return;
-            }
-
-            // Add server options
-            for (const server of this.servers) {
-                const option = document.createElement('option');
-                option.value = server.id;
-                option.textContent = server.friendly_name;
-                serverSelect.appendChild(option);
-            }
-
-            // Load current setting and set selected server
-            const settings = await api.getSettings();
-            if (settings && settings.model && this.servers.some(s => s.id.toString() === settings.model)) {
-                serverSelect.value = settings.model;
-            } else if (this.servers.length > 0) {
-                // Auto-select first server for new users and persist it
-                serverSelect.value = this.servers[0].id;
-                await api.updateSettings({ model: this.servers[0].id.toString() });
-            }
-        } catch (error) {
-            console.error('Failed to load servers:', error);
-            serverSelect.innerHTML = '<option value="">Failed to load servers</option>';
-        }
-    },
-
-    /**
-     * Setup server selector change handler
-     */
-    setupServerSelector() {
-        const serverSelect = document.getElementById('chat-model');
-
-        serverSelect.addEventListener('change', async () => {
-            try {
-                await api.updateSettings({ model: serverSelect.value });
-                // Notify user to start a new chat when server changes
-                if (this.conversationId && this.messages.length > 0) {
-                    this.showServerChangeNotice();
-                }
-            } catch (error) {
-                console.error('Failed to save server setting:', error);
-            }
-        });
-    },
-
-    /**
-     * Show notice that user should start a new chat after server change
-     */
-    showServerChangeNotice() {
-        // Remove existing notice if present
-        const existingNotice = document.querySelector('.server-change-notice');
-        if (existingNotice) {
-            existingNotice.remove();
-        }
-
-        const notice = document.createElement('div');
-        notice.className = 'server-change-notice';
-        notice.innerHTML = `
-            <span>Server changed. Start a new chat for best results.</span>
-            <button class="notice-btn" onclick="document.getElementById('new-chat-btn').click(); this.parentElement.remove();">New Chat</button>
-            <button class="notice-close" onclick="this.parentElement.remove();">&times;</button>
-        `;
-
-        const inputArea = document.getElementById('input-area');
-        inputArea.insertBefore(notice, inputArea.firstChild);
     },
 
     /**
@@ -507,9 +423,11 @@ const chat = {
         // Stop generation
         stopBtn.addEventListener('click', () => this.stopGeneration());
 
-        // Send on Enter (but not Shift+Enter)
+        // Send on Enter (but not Shift+Enter, and not when mention dropdown is open)
         input.addEventListener('keydown', (e) => {
             if (e.key === 'Enter' && !e.shiftKey) {
+                const mentionDropdown = document.getElementById('mention-dropdown');
+                if (mentionDropdown && !mentionDropdown.classList.contains('hidden')) return;
                 e.preventDefault();
                 this.sendMessage();
             }

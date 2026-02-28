@@ -16,6 +16,7 @@
                 <span>ULF web - Admin</span>
             </div>
             <div class="header-actions">
+                <button class="system-info-btn" id="user-mgmt-btn">Users</button>
                 <button class="system-info-btn" id="activity-log-btn">User Logs</button>
                 <button class="system-info-btn" id="system-info-btn">System Info</button>
                 <button class="restart-ulfweb-btn" id="restart-ulfweb-btn">Restart ULF Web</button>
@@ -36,6 +37,23 @@
 
                 <div class="servers-list" id="servers-list">
                     <!-- Servers will be loaded here -->
+                </div>
+            </section>
+
+            <section class="admin-section">
+                <div class="section-header">
+                    <h2>Authentication</h2>
+                </div>
+                <p class="section-description">Configure how users access the application.</p>
+
+                <div class="settings-form">
+                    <div class="setting-group">
+                        <label for="single-user-select">Single User Mode</label>
+                        <select id="single-user-select">
+                            <option value="">Disabled (login required)</option>
+                        </select>
+                        <p class="setting-hint">When set, all visitors are automatically logged in as this user without needing a password. Set to empty to require login.</p>
+                    </div>
                 </div>
             </section>
 
@@ -124,6 +142,23 @@
 
             <section class="admin-section">
                 <div class="section-header">
+                    <h2>Chat</h2>
+                </div>
+                <p class="section-description">Configure the AI server used for chat conversations.</p>
+
+                <div class="settings-form">
+                    <div class="setting-group">
+                        <label for="chat-server">Chat Server</label>
+                        <select id="chat-server">
+                            <option value="">-- Select a server --</option>
+                        </select>
+                        <p class="setting-hint">The AI server used for chat. Falls back to the first active server if not set.</p>
+                    </div>
+                </div>
+            </section>
+
+            <section class="admin-section">
+                <div class="section-header">
                     <h2>Translation</h2>
                 </div>
                 <p class="section-description">Configure the AI server for text translation.</p>
@@ -134,7 +169,7 @@
                         <select id="translation-server">
                             <option value="">-- Select a server --</option>
                         </select>
-                        <p class="setting-hint">The AI server used for text translation. Falls back to the Tilde config if not set.</p>
+                        <p class="setting-hint">The AI server used for text translation. Falls back to the first active server if not set.</p>
                     </div>
                 </div>
             </section>
@@ -330,6 +365,95 @@
         </div>
     </div>
 
+    <!-- User Management Modal -->
+    <div class="modal hidden" id="user-mgmt-modal">
+        <div class="modal-overlay" id="user-mgmt-modal-overlay"></div>
+        <div class="modal-content activity-log-modal-content">
+            <div class="modal-header">
+                <h2>User Management</h2>
+                <div class="log-viewer-header-actions">
+                    <button class="add-btn" id="add-user-btn"><span class="icon">+</span> Add User</button>
+                    <button class="close-btn" id="close-user-mgmt-modal">&times;</button>
+                </div>
+            </div>
+            <div class="modal-body">
+                <div class="activity-log-table-wrap">
+                    <table class="activity-log-table">
+                        <thead>
+                            <tr>
+                                <th>Username</th>
+                                <th>Type</th>
+                                <th>Full Name</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="user-mgmt-tbody"></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Add/Edit User Modal -->
+    <div class="modal hidden" id="user-edit-modal">
+        <div class="modal-overlay" id="user-edit-modal-overlay"></div>
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2 id="user-edit-modal-title">Add User</h2>
+                <button class="close-btn" id="close-user-edit-modal">&times;</button>
+            </div>
+            <div class="modal-body">
+                <input type="hidden" id="user-edit-id">
+                <div class="setting-group">
+                    <label for="user-edit-username">Username</label>
+                    <input type="text" id="user-edit-username" placeholder="username">
+                </div>
+                <div class="setting-group" id="user-edit-password-group">
+                    <label for="user-edit-password">Password</label>
+                    <input type="password" id="user-edit-password" placeholder="password">
+                </div>
+                <div class="setting-group">
+                    <label for="user-edit-fullname">Full Name</label>
+                    <input type="text" id="user-edit-fullname" placeholder="Full Name">
+                </div>
+                <div class="setting-group">
+                    <label for="user-edit-type">Type</label>
+                    <select id="user-edit-type">
+                        <option value="normal">Normal</option>
+                        <option value="admin">Admin</option>
+                    </select>
+                </div>
+                <div class="login-error" id="user-edit-error"></div>
+            </div>
+            <div class="modal-footer">
+                <button class="save-btn" id="save-user-btn">Save</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Set Password Modal -->
+    <div class="modal hidden" id="set-password-modal">
+        <div class="modal-overlay" id="set-password-modal-overlay"></div>
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2 id="set-password-title">Set Password</h2>
+                <button class="close-btn" id="close-set-password-modal">&times;</button>
+            </div>
+            <div class="modal-body">
+                <input type="hidden" id="set-password-user-id">
+                <div class="setting-group">
+                    <label for="set-password-value">New Password</label>
+                    <input type="password" id="set-password-value">
+                </div>
+                <div class="login-error" id="set-password-error"></div>
+            </div>
+            <div class="modal-footer">
+                <button class="save-btn" id="save-set-password-btn">Set Password</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="/js/api.js"></script>
     <script src="/js/admin.js"></script>
 </body>
 </html>

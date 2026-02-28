@@ -43,9 +43,14 @@
                 <!-- Conversations will be loaded here -->
             </div>
             <div class="sidebar-footer">
+                <button class="user-badge" id="user-badge" title="Change password"></button>
                 <button class="settings-btn" id="settings-btn">
                     <span class="icon">&#9881;</span>
                     Settings
+                </button>
+                <button class="logout-btn" id="logout-btn">
+                    <span class="icon">&#8594;</span>
+                    Logout
                 </button>
             </div>
         </aside>
@@ -64,13 +69,7 @@
                 </div>
             </div>
             <div class="input-area" id="input-area">
-                <div class="model-selector">
-                    <label for="chat-model">Server:</label>
-                    <select id="chat-model">
-                        <option value="">Loading...</option>
-                    </select>
-                    <span class="tokens-counter" id="tokens-counter"></span>
-                </div>
+                <span class="tokens-counter" id="tokens-counter"></span>
                 <div class="input-container">
                     <input type="file" id="pdf-input" accept=".pdf" class="hidden">
                     <input type="file" id="image-input" accept="image/*" class="hidden">
@@ -251,6 +250,35 @@
                 </div>
             </div>
         </main>
+    </div>
+
+    <!-- Password Change Modal -->
+    <div class="modal hidden" id="password-modal">
+        <div class="modal-overlay" id="password-modal-overlay"></div>
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>Change Password</h2>
+                <button class="close-btn" id="close-password-modal">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="setting-group">
+                    <label for="current-password">Current Password</label>
+                    <input type="password" id="current-password" autocomplete="current-password">
+                </div>
+                <div class="setting-group">
+                    <label for="new-password">New Password</label>
+                    <input type="password" id="new-password" autocomplete="new-password">
+                </div>
+                <div class="setting-group">
+                    <label for="confirm-password">Confirm New Password</label>
+                    <input type="password" id="confirm-password" autocomplete="new-password">
+                </div>
+                <div class="login-error" id="password-error"></div>
+            </div>
+            <div class="modal-footer">
+                <button class="save-btn" id="save-password-btn">Change Password</button>
+            </div>
+        </div>
     </div>
 
     <!-- Upload Modal -->

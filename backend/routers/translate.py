@@ -1,4 +1,4 @@
-"""Translation endpoint with SSE streaming using Tilde."""
+"""Translation endpoint with SSE streaming."""
 
 import json
 from typing import AsyncGenerator
@@ -10,7 +10,7 @@ from fastapi.responses import StreamingResponse
 from backend.auth import get_client_ip, require_user
 from backend.config import settings
 from backend.models import TranslateRequest
-from backend.services.storage import get_admin_settings, get_server, log_activity
+from backend.services.storage import get_admin_settings, get_server, list_servers, log_activity
 
 router = APIRouter(prefix="/translate", tags=["translate"])
 
@@ -43,16 +43,19 @@ async def stream_translation(
     target_lang: str
 ) -> AsyncGenerator[str, None]:
     """Stream translation response from configured translation server."""
-    # Resolve translation server URL: admin setting > config fallback
-    server_url = settings.tilde.url
-    try:
-        admin_settings = await get_admin_settings()
-        if admin_settings.translation_server_id:
-            server = await get_server(admin_settings.translation_server_id)
-            if server:
-                server_url = server.url
-    except Exception:
-        pass  # Fall back to config
+    # Resolve translation server URL: admin setting > first active server
+    server_url = None
+    admin_settings = await get_admin_settings()
+    if admin_settings.translation_server_id:
+        server = await get_server(admin_settings.translation_server_id)
+        if server and server.active:
+            server_url = server.url
+    if not server_url:
+        active_servers = await list_servers(active_only=True)
+        if active_servers:
+            server_url = active_servers[0].url
+        else:
+            server_url = settings.llama.url
 
     source_name = LANGUAGE_NAMES.get(source_lang, source_lang)
     target_name = LANGUAGE_NAMES.get(target_lang, target_lang)
@@ -163,7 +166,7 @@ async def stream_translation(
         yield f"data: {json.dumps({'type': 'done'})}\n\n"
 
     except httpx.ConnectError:
-        yield f"data: {json.dumps({'type': 'error', 'content': 'Cannot connect to translation server. Is Tilde running?'})}\n\n"
+        yield f"data: {json.dumps({'type': 'error', 'content': 'Cannot connect to translation server. Is the LLM server running?'})}\n\n"
     except Exception as e:
         yield f"data: {json.dumps({'type': 'error', 'content': str(e)})}\n\n"
 

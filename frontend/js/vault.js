@@ -201,12 +201,14 @@ const vault = {
                     <option value="archived" ${c.status === 'archived' ? 'selected' : ''}>Archived</option>
                 </select>
                 <button class="vault-btn vault-btn-danger" id="vault-delete-case-btn">Delete Case</button>
+                <button class="vault-btn vault-btn-chat" id="vault-chat-case-btn">Chat</button>
             </div>
         `;
 
         document.getElementById('vault-add-record-btn').addEventListener('click', () => this.showAddRecordForm());
         document.getElementById('vault-status-select').addEventListener('change', (e) => this.updateCaseStatus(e.target.value));
         document.getElementById('vault-delete-case-btn').addEventListener('click', () => this.deleteCase());
+        document.getElementById('vault-chat-case-btn').addEventListener('click', () => this.chatAboutCase());
 
         this.renderRecordList();
     },
@@ -227,6 +229,22 @@ const vault = {
             this.showCaseList();
         } catch (error) {
             alert('Failed to delete case: ' + error.message);
+        }
+    },
+
+    chatAboutCase() {
+        const c = this.currentCase;
+        if (!c) return;
+
+        // Switch to chat tab
+        document.getElementById('chat-tab').click();
+
+        // Pre-fill @mention with case name and track the case ref
+        const input = document.getElementById('message-input');
+        input.value = `@${c.name} `;
+        input.focus();
+        if (!chat.caseRefs.includes(c.id)) {
+            chat.caseRefs.push(c.id);
         }
     },
 

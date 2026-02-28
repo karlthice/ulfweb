@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="icon" type="image/png" href="/images/ULF-icon-1-black.png">
+    <title>ULF web - Login</title>
+    <link rel="stylesheet" href="/css/main.css">
+    <link rel="stylesheet" href="/css/login.css">
+</head>
+<body>
+    <div class="login-page">
+        <div class="login-card">
+            <div class="logo">
+                <img src="/images/ULF-icon-1-black.png" alt="ULF" class="logo-icon">
+                <span>ULF</span>
+            </div>
+            <form class="login-form" id="login-form">
+                <div class="field">
+                    <label for="username">Username</label>
+                    <input type="text" id="username" name="username" autocomplete="username" autofocus required>
+                </div>
+                <div class="field">
+                    <label for="password">Password</label>
+                    <input type="password" id="password" name="password" autocomplete="current-password" required>
+                </div>
+                <div class="login-error" id="login-error"></div>
+                <button type="submit" class="login-btn" id="login-btn">Log in</button>
+            </form>
+        </div>
+    </div>
+    <script>
+        const form = document.getElementById('login-form');
+        const errorEl = document.getElementById('login-error');
+        const btn = document.getElementById('login-btn');
+
+        form.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            errorEl.textContent = '';
+            btn.disabled = true;
+
+            const username = document.getElementById('username').value;
+            const password = document.getElementById('password').value;
+
+            try {
+                const response = await fetch('/api/v1/auth/login', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ username, password })
+                });
+
+                if (!response.ok) {
+                    const data = await response.json().catch(() => ({}));
+                    errorEl.textContent = data.detail || 'Login failed';
+                    btn.disabled = false;
+                    return;
+                }
+
+                window.location.href = '/';
+            } catch (err) {
+                errorEl.textContent = 'Connection error';
+                btn.disabled = false;
+            }
+        });
+    </script>
+</body>
+</html>

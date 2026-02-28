@@ -16,19 +16,12 @@ from backend.models import (
     DocumentQuery,
     DocumentStatusResponse,
 )
+from backend.auth import get_client_ip, require_admin, require_user
 from backend.services import storage
 from backend.services.graphrag import graphrag_service
 from backend.services.storage import log_activity
 
 router = APIRouter(prefix="/documents", tags=["documents"])
-
-
-def get_client_ip(request: Request) -> str:
-    """Extract client IP from request."""
-    forwarded = request.headers.get("X-Forwarded-For")
-    if forwarded:
-        return forwarded.split(",")[0].strip()
-    return request.client.host if request.client else "127.0.0.1"
 
 
 UPLOAD_DIR = Path("data/uploads")
@@ -44,7 +37,8 @@ async def list_collections():
 
 @router.post("/collections", response_model=Collection)
 async def create_collection(data: CollectionCreate, request: Request):
-    """Create a new collection (admin)."""
+    """Create a new collection (admin only)."""
+    await require_admin(request)
     try:
         collection = await storage.create_collection(data.name, data.description)
         ip = get_client_ip(request)
@@ -66,8 +60,9 @@ async def get_collection(collection_id: int):
 
 
 @router.put("/collections/{collection_id}", response_model=Collection)
-async def update_collection(collection_id: int, data: CollectionUpdate):
-    """Update a collection (admin)."""
+async def update_collection(collection_id: int, data: CollectionUpdate, request: Request):
+    """Update a collection (admin only)."""
+    await require_admin(request)
     updates = data.model_dump(exclude_unset=True)
     collection = await storage.update_collection(collection_id, updates)
     if not collection:
@@ -77,7 +72,8 @@ async def update_collection(collection_id: int, data: CollectionUpdate):
 
 @router.delete("/collections/{collection_id}")
 async def delete_collection(collection_id: int, request: Request):
-    """Delete a collection (admin). Cannot delete default collection."""
+    """Delete a collection (admin only). Cannot delete default collection."""
+    await require_admin(request)
     deleted = await storage.delete_collection(collection_id)
     if not deleted:
         raise HTTPException(status_code=400, detail="Cannot delete collection (may be default or not found)")
@@ -177,7 +173,8 @@ async def get_document_file(document_id: int):
 
 @router.delete("/documents/{document_id}")
 async def delete_document(document_id: int, request: Request):
-    """Delete a document."""
+    """Delete a document (admin only)."""
+    await require_admin(request)
     doc = await storage.get_document(document_id)
     if not doc:
         raise HTTPException(status_code=404, detail="Document not found")

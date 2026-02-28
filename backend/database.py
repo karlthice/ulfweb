@@ -6,14 +6,28 @@ from contextlib import asynccontextmanager
 from typing import AsyncGenerator
 
 from backend.config import settings
+from backend.auth import hash_password
 
 
 SCHEMA = """
--- Users identified by IP
+-- Users with username/password authentication
 CREATE TABLE IF NOT EXISTS users (
     id INTEGER PRIMARY KEY,
-    ip_address TEXT UNIQUE NOT NULL,
+    username TEXT UNIQUE NOT NULL,
+    usertype TEXT NOT NULL DEFAULT 'normal',
+    full_name TEXT DEFAULT '',
+    description TEXT DEFAULT '',
+    password_hash TEXT NOT NULL,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Sessions for cookie-based auth
+CREATE TABLE IF NOT EXISTS sessions (
+    id TEXT PRIMARY KEY,
+    user_id INTEGER NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    expires_at TIMESTAMP NOT NULL,
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
 );
 
 -- User settings
@@ -158,6 +172,7 @@ CREATE TABLE IF NOT EXISTS admin_settings (
     document_ai_extraction_server_id INTEGER,
     document_ai_understanding_server_id INTEGER,
     date_format TEXT DEFAULT 'YYYY-MM-DD',
+    single_user TEXT DEFAULT '',
     FOREIGN KEY (document_ai_query_server_id) REFERENCES servers(id) ON DELETE SET NULL,
     FOREIGN KEY (document_ai_extraction_server_id) REFERENCES servers(id) ON DELETE SET NULL,
     FOREIGN KEY (document_ai_understanding_server_id) REFERENCES servers(id) ON DELETE SET NULL
@@ -403,6 +418,82 @@ async def init_database() -> None:
             )
             await db.commit()
 
+        # Migration: users table - migrate from IP-based to username/password
+        cursor = await db.execute("PRAGMA table_info(users)")
+        user_columns = [row[1] for row in await cursor.fetchall()]
+        if "ip_address" in user_columns:
+            # Old schema - drop all IP-based data and recreate
+            await db.execute("DELETE FROM activity_log")
+            await db.execute("DELETE FROM vault_records")
+            await db.execute("DELETE FROM vault_cases")
+            await db.execute("DELETE FROM messages")
+            await db.execute("DELETE FROM conversations")
+            await db.execute("DELETE FROM user_settings")
+            await db.execute("DELETE FROM users")
+            await db.execute("DROP TABLE IF EXISTS users")
+            await db.execute("""
+                CREATE TABLE users (
+                    id INTEGER PRIMARY KEY,
+                    username TEXT UNIQUE NOT NULL,
+                    usertype TEXT NOT NULL DEFAULT 'normal',
+                    full_name TEXT DEFAULT '',
+                    description TEXT DEFAULT '',
+                    password_hash TEXT NOT NULL,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            """)
+            # Create sessions table
+            await db.execute("""
+                CREATE TABLE IF NOT EXISTS sessions (
+                    id TEXT PRIMARY KEY,
+                    user_id INTEGER NOT NULL,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    expires_at TIMESTAMP NOT NULL,
+                    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+                )
+            """)
+            await db.commit()
+
+        # Migration: Add single_user to admin_settings
+        cursor = await db.execute("PRAGMA table_info(admin_settings)")
+        admin_columns = [row[1] for row in await cursor.fetchall()]
+        if "single_user" not in admin_columns:
+            await db.execute(
+                "ALTER TABLE admin_settings ADD COLUMN single_user TEXT DEFAULT ''"
+            )
+            await db.commit()
+
+        # Migration: Add chat_server_id to admin_settings
+        cursor = await db.execute("PRAGMA table_info(admin_settings)")
+        admin_columns = [row[1] for row in await cursor.fetchall()]
+        if "chat_server_id" not in admin_columns:
+            await db.execute(
+                "ALTER TABLE admin_settings ADD COLUMN chat_server_id INTEGER"
+            )
+            await db.commit()
+
+        # Create default admin user if no users exist
+        cursor = await db.execute("SELECT COUNT(*) FROM users")
+        user_count = (await cursor.fetchone())[0]
+        if user_count == 0:
+            admin_hash = hash_password("admin")
+            await db.execute(
+                """INSERT INTO users (username, usertype, full_name, password_hash)
+                   VALUES (?, ?, ?, ?)""",
+                ("admin", "admin", "Administrator", admin_hash)
+            )
+            # Set single_user to 'admin' so app works immediately without login
+            await db.execute(
+                "UPDATE admin_settings SET single_user = 'admin' WHERE id = 1"
+            )
+            await db.commit()
+
+        # Clean up expired sessions
+        await db.execute(
+            "DELETE FROM sessions WHERE expires_at < CURRENT_TIMESTAMP"
+        )
+        await db.commit()
+
         # Create Default collection if not exists
         cursor = await db.execute(
             "SELECT id FROM collections WHERE is_default = 1"
@@ -421,6 +512,8 @@ async def get_db() -> AsyncGenerator[aiosqlite.Connection, None]:
     """Get a database connection."""
     db = await aiosqlite.connect(settings.database.path)
     db.row_factory = aiosqlite.Row
+    # Override LOWER() to handle Unicode (SQLite built-in only handles ASCII)
+    await db.create_function("LOWER", 1, lambda s: s.lower() if s else s)
     try:
         yield db
     finally:

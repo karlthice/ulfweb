@@ -7,13 +7,14 @@ import httpx
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import StreamingResponse
 
+from backend.auth import get_client_ip, require_user
 from backend.config import settings
 from backend.models import ChatRequest
 from backend.services.storage import (
     add_message,
+    get_admin_settings,
     get_conversation,
     get_conversation_messages,
-    get_or_create_user,
     get_server,
     get_user_settings,
     get_vault_case_context,
@@ -24,14 +25,6 @@ from backend.services.storage import (
 )
 
 router = APIRouter(prefix="/chat", tags=["chat"])
-
-
-def get_client_ip(request: Request) -> str:
-    """Extract client IP from request."""
-    forwarded = request.headers.get("X-Forwarded-For")
-    if forwarded:
-        return forwarded.split(",")[0].strip()
-    return request.client.host if request.client else "127.0.0.1"
 
 
 async def stream_chat_response(
@@ -52,25 +45,22 @@ async def stream_chat_response(
     # Build messages for llama.cpp API
     llama_messages = []
 
-    # Add system prompt if set
+    # Build system prompt, merging vault case context if @Case references present
+    system_parts = []
     if user_settings.system_prompt:
-        llama_messages.append({
-            "role": "system",
-            "content": user_settings.system_prompt
-        })
+        system_parts.append(user_settings.system_prompt)
 
-    # Inject vault case context if @Case references present
     if case_refs:
-        case_contexts = []
         for case_id in case_refs:
             ctx = await get_vault_case_context(case_id, user_id)
             if ctx:
-                case_contexts.append(ctx)
-        if case_contexts:
-            llama_messages.append({
-                "role": "system",
-                "content": "\n\n".join(case_contexts)
-            })
+                system_parts.append(ctx)
+
+    if system_parts:
+        llama_messages.append({
+            "role": "system",
+            "content": "\n\n".join(system_parts)
+        })
 
     # Add conversation history (except the last user message, we'll add it with image if present)
     for msg in messages[:-1]:  # Exclude last message (it's the current user message)
@@ -104,20 +94,21 @@ async def stream_chat_response(
         "top_p": user_settings.top_p,
         "repeat_penalty": user_settings.repeat_penalty,
         "max_tokens": user_settings.max_tokens,
+        "reasoning_budget": 0,  # Disable thinking/reasoning tokens
     }
 
-    # Determine server URL - use selected server from database if set
+    # Determine server URL from admin setting, fall back to first active server
     server_url = settings.llama.url
-    if user_settings.model:
-        try:
-            server_id = int(user_settings.model)
-            server = await get_server(server_id)
-            if server and server.active:
-                server_url = server.url
-        except (ValueError, TypeError):
-            pass  # Invalid server ID, use default
+    admin_cfg = await get_admin_settings()
+    if admin_cfg.chat_server_id:
+        server = await get_server(admin_cfg.chat_server_id)
+        if server and server.active:
+            server_url = server.url
+        else:
+            active_servers = await list_servers(active_only=True)
+            if active_servers:
+                server_url = active_servers[0].url
     else:
-        # No server selected - fall back to first active admin server
         active_servers = await list_servers(active_only=True)
         if active_servers:
             server_url = active_servers[0].url
@@ -137,6 +128,10 @@ async def stream_chat_response(
                     yield f"data: {json.dumps({'type': 'error', 'content': f'LLM server error: {error_text.decode()}'})}\n\n"
                     return
 
+                # Buffer to strip <think>...</think> blocks from reasoning models
+                token_buffer = ""
+                in_think = False
+
                 async for line in response.aiter_lines():
                     if not line:
                         continue
@@ -153,10 +148,49 @@ async def stream_chat_response(
                                 delta = chunk["choices"][0].get("delta", {})
                                 content = delta.get("content", "")
                                 if content:
-                                    assistant_content += content
-                                    yield f"data: {json.dumps({'type': 'content', 'content': content})}\n\n"
+                                    token_buffer += content
+
+                                    # Strip <think>...</think> blocks
+                                    while "<think>" in token_buffer:
+                                        before = token_buffer[:token_buffer.find("<think>")]
+                                        after = token_buffer[token_buffer.find("<think>") + 7:]
+                                        if "</think>" in after:
+                                            token_buffer = before + after[after.find("</think>") + 8:]
+                                        else:
+                                            if before:
+                                                assistant_content += before
+                                                yield f"data: {json.dumps({'type': 'content', 'content': before})}\n\n"
+                                            token_buffer = after
+                                            in_think = True
+                                            break
+
+                                    if in_think:
+                                        if "</think>" in token_buffer:
+                                            token_buffer = token_buffer[token_buffer.find("</think>") + 8:]
+                                            in_think = False
+                                        else:
+                                            token_buffer = token_buffer[-8:] if len(token_buffer) > 8 else token_buffer
+                                            continue
+
+                                    token_buffer = token_buffer.replace("</think>", "")
+
+                                    if in_think:
+                                        continue
+
+                                    # Flush buffer, keeping tail for partial tag detection
+                                    if len(token_buffer) > 10:
+                                        to_send = token_buffer[:-5]
+                                        token_buffer = token_buffer[-5:]
+                                        if to_send:
+                                            assistant_content += to_send
+                                            yield f"data: {json.dumps({'type': 'content', 'content': to_send})}\n\n"
                         except json.JSONDecodeError:
                             continue
+
+                # Flush remaining buffer
+                if token_buffer and not in_think:
+                    assistant_content += token_buffer
+                    yield f"data: {json.dumps({'type': 'content', 'content': token_buffer})}\n\n"
 
         # Save assistant message
         if assistant_content:
@@ -184,8 +218,9 @@ async def stream_chat_response(
 @router.post("/{conversation_id}")
 async def chat(conversation_id: int, data: ChatRequest, request: Request):
     """Send a message and stream the response."""
+    user = await require_user(request)
+    user_id = user["id"]
     ip = get_client_ip(request)
-    user_id = await get_or_create_user(ip)
 
     # Verify conversation exists and belongs to user
     conversation = await get_conversation(conversation_id, user_id)

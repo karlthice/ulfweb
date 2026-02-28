@@ -2,9 +2,9 @@
 
 from fastapi import APIRouter, Request
 
+from backend.auth import get_client_ip, require_user
 from backend.models import UserSettings, UserSettingsUpdate
 from backend.services.storage import (
-    get_or_create_user,
     get_user_settings,
     log_activity,
     update_user_settings,
@@ -13,29 +13,23 @@ from backend.services.storage import (
 router = APIRouter(prefix="/settings", tags=["settings"])
 
 
-def get_client_ip(request: Request) -> str:
-    """Extract client IP from request."""
-    forwarded = request.headers.get("X-Forwarded-For")
-    if forwarded:
-        return forwarded.split(",")[0].strip()
-    return request.client.host if request.client else "127.0.0.1"
-
-
-@router.get("", response_model=UserSettings)
+@router.get("")
 async def get_settings(request: Request):
-    """Get the current user's settings."""
-    ip = get_client_ip(request)
-    user_id = await get_or_create_user(ip)
-    return await get_user_settings(user_id)
+    """Get the current user's settings, including usertype."""
+    user = await require_user(request)
+    settings = await get_user_settings(user["id"])
+    result = settings.model_dump()
+    result["usertype"] = user["usertype"]
+    return result
 
 
 @router.put("", response_model=UserSettings)
 async def update_settings(data: UserSettingsUpdate, request: Request):
     """Update the current user's settings."""
+    user = await require_user(request)
     ip = get_client_ip(request)
-    user_id = await get_or_create_user(ip)
     updates = data.model_dump(exclude_unset=True)
-    result = await update_user_settings(user_id, updates)
+    result = await update_user_settings(user["id"], updates)
     changed = ", ".join(updates.keys())
-    await log_activity(ip, "settings.update", f"Updated settings: {changed}", user_id)
+    await log_activity(ip, "settings.update", f"Updated settings: {changed}", user["id"])
     return result

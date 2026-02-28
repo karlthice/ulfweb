@@ -25,26 +25,6 @@ from backend.models import (
 )
 
 
-async def get_or_create_user(ip_address: str) -> int:
-    """Get or create a user by IP address, returns user ID."""
-    async with get_db() as db:
-        cursor = await db.execute(
-            "SELECT id FROM users WHERE ip_address = ?",
-            (ip_address,)
-        )
-        row = await cursor.fetchone()
-
-        if row:
-            return row["id"]
-
-        cursor = await db.execute(
-            "INSERT INTO users (ip_address) VALUES (?)",
-            (ip_address,)
-        )
-        await db.commit()
-        return cursor.lastrowid
-
-
 # Conversation operations
 async def list_conversations(user_id: int) -> list[Conversation]:
     """List all conversations for a user, ordered by most recent."""
@@ -738,9 +718,9 @@ async def get_admin_settings() -> AdminSettings:
         cursor = await db.execute(
             """SELECT document_ai_query_server_id, document_ai_extraction_server_id,
                       document_ai_understanding_server_id, translation_server_id,
-                      skip_contextual_retrieval, whisper_model,
+                      chat_server_id, skip_contextual_retrieval, whisper_model,
                       vault_image_server_id, vault_text_server_id,
-                      date_format
+                      date_format, single_user
                FROM admin_settings WHERE id = 1"""
         )
         row = await cursor.fetchone()
@@ -750,11 +730,13 @@ async def get_admin_settings() -> AdminSettings:
                 document_ai_extraction_server_id=row["document_ai_extraction_server_id"],
                 document_ai_understanding_server_id=row["document_ai_understanding_server_id"],
                 translation_server_id=row["translation_server_id"],
+                chat_server_id=row["chat_server_id"],
                 skip_contextual_retrieval=bool(row["skip_contextual_retrieval"]),
                 whisper_model=row["whisper_model"] or "large-v3-turbo",
                 vault_image_server_id=row["vault_image_server_id"],
                 vault_text_server_id=row["vault_text_server_id"],
                 date_format=row["date_format"] or "YYYY-MM-DD",
+                single_user=row["single_user"] or "",
             )
         return AdminSettings()
 
@@ -766,11 +748,13 @@ async def update_admin_settings(updates: dict[str, Any]) -> AdminSettings:
         "document_ai_extraction_server_id",
         "document_ai_understanding_server_id",
         "translation_server_id",
+        "chat_server_id",
         "skip_contextual_retrieval",
         "whisper_model",
         "vault_image_server_id",
         "vault_text_server_id",
         "date_format",
+        "single_user",
     )
     async with get_db() as db:
         # Ensure row exists
@@ -801,7 +785,7 @@ async def list_vault_cases(user_id: int) -> list[VaultCase]:
         cursor = await db.execute(
             """SELECT vc.id, vc.user_id, vc.identifier, vc.name, vc.description,
                       vc.is_public, vc.status, vc.ai_summary, vc.created_at, vc.updated_at,
-                      u.ip_address as owner_ip
+                      u.username as owner_ip
                FROM vault_cases vc
                JOIN users u ON u.id = vc.user_id
                WHERE vc.user_id = ? OR vc.is_public = 1
@@ -839,7 +823,7 @@ async def get_vault_case(case_id: int, user_id: int) -> VaultCaseWithRecords | N
         cursor = await db.execute(
             """SELECT vc.id, vc.user_id, vc.identifier, vc.name, vc.description,
                       vc.is_public, vc.status, vc.ai_summary, vc.created_at, vc.updated_at,
-                      u.ip_address as owner_ip
+                      u.username as owner_ip
                FROM vault_cases vc
                JOIN users u ON u.id = vc.user_id
                WHERE vc.id = ? AND (vc.user_id = ? OR vc.is_public = 1)""",
@@ -855,7 +839,7 @@ async def get_vault_case(case_id: int, user_id: int) -> VaultCaseWithRecords | N
             """SELECT r.id, r.case_id, r.record_type, r.title, r.content, r.filename,
                       r.original_filename, r.file_size, r.ai_description, r.starred,
                       r.record_date, r.created_by_user_id, r.created_at,
-                      COALESCE(cu.ip_address, '') as created_by_ip
+                      COALESCE(cu.username, '') as created_by_ip
                FROM vault_records r
                LEFT JOIN users cu ON cu.id = r.created_by_user_id
                WHERE r.case_id = ?
@@ -898,7 +882,7 @@ async def update_vault_case(case_id: int, user_id: int, updates: dict[str, Any])
         cursor = await db.execute(
             """SELECT vc.id, vc.user_id, vc.identifier, vc.name, vc.description,
                       vc.is_public, vc.status, vc.ai_summary, vc.created_at, vc.updated_at,
-                      u.ip_address as owner_ip
+                      u.username as owner_ip
                FROM vault_cases vc
                JOIN users u ON u.id = vc.user_id
                WHERE vc.id = ?""",
@@ -920,17 +904,17 @@ async def delete_vault_case(case_id: int, user_id: int) -> bool:
 
 
 async def search_vault_cases(user_id: int, query: str) -> list[VaultCase]:
-    """Search cases by name/identifier for @mention autocomplete."""
+    """Search cases by name/identifier for @mention autocomplete (case-insensitive)."""
     async with get_db() as db:
-        pattern = f"%{query}%"
+        pattern = f"%{query.lower()}%"
         cursor = await db.execute(
             """SELECT vc.id, vc.user_id, vc.identifier, vc.name, vc.description,
                       vc.is_public, vc.status, vc.ai_summary, vc.created_at, vc.updated_at,
-                      u.ip_address as owner_ip
+                      u.username as owner_ip
                FROM vault_cases vc
                JOIN users u ON u.id = vc.user_id
                WHERE (vc.user_id = ? OR vc.is_public = 1)
-                 AND (vc.name LIKE ? OR vc.identifier LIKE ?)
+                 AND (LOWER(vc.name) LIKE ? OR LOWER(vc.identifier) LIKE ?)
                ORDER BY vc.updated_at DESC
                LIMIT 20""",
             (user_id, pattern, pattern)
@@ -998,7 +982,7 @@ async def toggle_vault_record_star(record_id: int) -> VaultRecord | None:
             """SELECT r.id, r.case_id, r.record_type, r.title, r.content, r.filename,
                       r.original_filename, r.file_size, r.ai_description, r.starred,
                       r.record_date, r.created_by_user_id, r.created_at,
-                      COALESCE(cu.ip_address, '') as created_by_ip
+                      COALESCE(cu.username, '') as created_by_ip
                FROM vault_records r
                LEFT JOIN users cu ON cu.id = r.created_by_user_id
                WHERE r.id = ?""",
@@ -1144,7 +1128,7 @@ async def get_vault_record(record_id: int) -> VaultRecord | None:
             """SELECT r.id, r.case_id, r.record_type, r.title, r.content, r.filename,
                       r.original_filename, r.file_size, r.ai_description, r.starred,
                       r.record_date, r.created_by_user_id, r.created_at,
-                      COALESCE(cu.ip_address, '') as created_by_ip
+                      COALESCE(cu.username, '') as created_by_ip
                FROM vault_records r
                LEFT JOIN users cu ON cu.id = r.created_by_user_id
                WHERE r.id = ?""",

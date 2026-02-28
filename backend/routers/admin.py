@@ -8,6 +8,7 @@ from pathlib import Path
 
 from fastapi import APIRouter, HTTPException, Request
 
+from backend.auth import get_client_ip, require_admin
 from backend.config import settings
 from backend.models import AdminSettings, AdminSettingsUpdate, Server, ServerCreate, ServerUpdate
 from backend.services.llama_manager import llama_manager
@@ -25,14 +26,6 @@ from backend.services.storage import (
 )
 
 router = APIRouter(prefix="/admin", tags=["admin"])
-
-
-def get_client_ip(request: Request) -> str:
-    """Extract client IP from request."""
-    forwarded = request.headers.get("X-Forwarded-For")
-    if forwarded:
-        return forwarded.split(",")[0].strip()
-    return request.client.host if request.client else "127.0.0.1"
 
 
 def _find_free_port() -> int:
@@ -160,7 +153,8 @@ async def get_active_servers():
 
 @router.post("/servers", response_model=Server)
 async def add_server(data: ServerCreate, request: Request):
-    """Add a new server."""
+    """Add a new server (admin only)."""
+    await require_admin(request)
     url = data.url
     if not url:
         port = _find_free_port()
@@ -197,7 +191,8 @@ async def get_server_by_id(server_id: int):
 
 @router.put("/servers/{server_id}", response_model=Server)
 async def update_server_by_id(server_id: int, data: ServerUpdate, request: Request):
-    """Update a server."""
+    """Update a server (admin only)."""
+    await require_admin(request)
     old_server = await get_server(server_id)
     if not old_server:
         raise HTTPException(status_code=404, detail="Server not found")
@@ -235,7 +230,8 @@ async def update_server_by_id(server_id: int, data: ServerUpdate, request: Reque
 
 @router.delete("/servers/{server_id}")
 async def delete_server_by_id(server_id: int, request: Request):
-    """Delete a server."""
+    """Delete a server (admin only)."""
+    await require_admin(request)
     server = await get_server(server_id)
     # Stop any running process first
     await llama_manager.stop_server(server_id)
@@ -251,7 +247,8 @@ async def delete_server_by_id(server_id: int, request: Request):
 
 @router.post("/servers/{server_id}/start")
 async def start_server_process(server_id: int, request: Request):
-    """Start a server's llama.cpp process."""
+    """Start a server's llama.cpp process (admin only)."""
+    await require_admin(request)
     server = await get_server(server_id)
     if not server:
         raise HTTPException(status_code=404, detail="Server not found")
@@ -273,7 +270,8 @@ async def start_server_process(server_id: int, request: Request):
 
 @router.post("/servers/{server_id}/stop")
 async def stop_server_process(server_id: int, request: Request):
-    """Stop a server's llama.cpp process."""
+    """Stop a server's llama.cpp process (admin only)."""
+    await require_admin(request)
     server = await get_server(server_id)
     if not server:
         raise HTTPException(status_code=404, detail="Server not found")
@@ -290,7 +288,8 @@ async def stop_server_process(server_id: int, request: Request):
 
 @router.post("/servers/{server_id}/restart")
 async def restart_server_process(server_id: int, request: Request):
-    """Restart a server's llama.cpp process."""
+    """Restart a server's llama.cpp process (admin only)."""
+    await require_admin(request)
     server = await get_server(server_id)
     if not server:
         raise HTTPException(status_code=404, detail="Server not found")
@@ -344,10 +343,11 @@ async def get_server_process_status(server_id: int):
 
 @router.post("/restart")
 async def restart_ulfweb(request: Request):
-    """Restart the entire ULF Web application.
+    """Restart the entire ULF Web application (admin only).
 
     Touches main.py to trigger uvicorn's file-change reloader.
     """
+    await require_admin(request)
     ip = get_client_ip(request)
     await log_activity(ip, "admin.restart", "Restarted ULF Web application")
 
@@ -370,7 +370,8 @@ async def get_settings():
 
 @router.put("/settings", response_model=AdminSettings)
 async def update_settings(data: AdminSettingsUpdate, request: Request):
-    """Update admin settings."""
+    """Update admin settings (admin only)."""
+    await require_admin(request)
     updates = data.model_dump(exclude_unset=True)
     result = await update_admin_settings(updates)
     ip = get_client_ip(request)

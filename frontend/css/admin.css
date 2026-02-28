@@ -752,3 +752,24 @@
     font-size: 0.8rem;
     color: var(--text-muted);
 }
+
+/* User management action buttons */
+.action-btn {
+    padding: 0.25rem 0.5rem;
+    background: var(--bg-primary);
+    color: var(--text-secondary);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    font-size: 0.8rem;
+    cursor: pointer;
+    margin-right: 0.25rem;
+}
+
+.action-btn:hover {
+    background: var(--bg-secondary);
+}
+
+.action-btn.delete-btn:hover {
+    color: var(--error);
+    border-color: var(--error);
+}

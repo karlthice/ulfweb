@@ -5,8 +5,10 @@ import uuid
 from pathlib import Path
 
 import httpx
+from lingua import Language, LanguageDetectorBuilder
 from fastapi import APIRouter, BackgroundTasks, File, Form, HTTPException, Request, UploadFile
 
+from backend.auth import get_client_ip, require_user
 from backend.models import (
     VaultCase,
     VaultCaseCreate,
@@ -23,79 +25,88 @@ router = APIRouter(prefix="/vault", tags=["vault"])
 VAULT_DIR = Path("data/vault")
 VAULT_DIR.mkdir(parents=True, exist_ok=True)
 
+# Language detector for matching summary language to record language
+_LANG_DETECTOR = (
+    LanguageDetectorBuilder
+    .from_languages(
+        Language.ICELANDIC, Language.ENGLISH, Language.BOKMAL, Language.NYNORSK,
+        Language.SWEDISH, Language.DANISH, Language.GERMAN, Language.FRENCH,
+        Language.ITALIAN, Language.SPANISH,
+    )
+    .build()
+)
 
-def get_client_ip(request: Request) -> str:
-    """Extract client IP from request."""
-    forwarded = request.headers.get("X-Forwarded-For")
-    if forwarded:
-        return forwarded.split(",")[0].strip()
-    return request.client.host if request.client else "127.0.0.1"
+_LINGUA_NAMES = {
+    Language.ICELANDIC: "Icelandic", Language.ENGLISH: "English",
+    Language.BOKMAL: "Norwegian", Language.NYNORSK: "Norwegian",
+    Language.SWEDISH: "Swedish", Language.DANISH: "Danish",
+    Language.GERMAN: "German", Language.FRENCH: "French",
+    Language.ITALIAN: "Italian", Language.SPANISH: "Spanish",
+}
 
 
 # Case endpoints
 @router.get("/cases", response_model=list[VaultCase])
 async def list_cases(request: Request):
     """List cases accessible to the current user."""
-    ip = get_client_ip(request)
-    user_id = await storage.get_or_create_user(ip)
-    return await storage.list_vault_cases(user_id)
+    user = await require_user(request)
+    return await storage.list_vault_cases(user["id"])
 
 
 @router.post("/cases", response_model=VaultCase)
 async def create_case(data: VaultCaseCreate, request: Request):
     """Create a new vault case."""
+    user = await require_user(request)
     ip = get_client_ip(request)
-    user_id = await storage.get_or_create_user(ip)
     case = await storage.create_vault_case(
-        user_id=user_id,
+        user_id=user["id"],
         identifier=data.identifier,
         name=data.name,
         description=data.description,
         is_public=data.is_public,
-        owner_ip=ip,
+        owner_ip=user["username"],
     )
-    await log_activity(ip, "vault.case.create", f"Created case '{data.name}' ({data.identifier})", user_id)
+    await log_activity(ip, "vault.case.create", f"Created case '{data.name}' ({data.identifier})", user["id"])
     return case
 
 
 @router.get("/cases/search", response_model=list[VaultCase])
 async def search_cases(q: str, request: Request):
     """Search cases by name/identifier for @mention autocomplete."""
-    ip = get_client_ip(request)
-    user_id = await storage.get_or_create_user(ip)
-    return await storage.search_vault_cases(user_id, q)
+    user = await require_user(request)
+    return await storage.search_vault_cases(user["id"], q)
 
 
 @router.get("/cases/{case_id}", response_model=VaultCaseWithRecords)
 async def get_case(case_id: int, request: Request):
     """Get a case with all its records."""
-    ip = get_client_ip(request)
-    user_id = await storage.get_or_create_user(ip)
-    case = await storage.get_vault_case(case_id, user_id)
+    user = await require_user(request)
+    case = await storage.get_vault_case(case_id, user["id"])
     if not case:
         raise HTTPException(status_code=404, detail="Case not found")
-    case.current_user_id = user_id
+    case.current_user_id = user["id"]
     return case
 
 
 @router.put("/cases/{case_id}", response_model=VaultCase)
 async def update_case(case_id: int, data: VaultCaseUpdate, request: Request):
     """Update a case (owner only)."""
+    user = await require_user(request)
     ip = get_client_ip(request)
-    user_id = await storage.get_or_create_user(ip)
     updates = data.model_dump(exclude_unset=True)
-    case = await storage.update_vault_case(case_id, user_id, updates)
+    case = await storage.update_vault_case(case_id, user["id"], updates)
     if not case:
         raise HTTPException(status_code=404, detail="Case not found or not owner")
-    await log_activity(ip, "vault.case.update", f"Updated case '{case.name}'", user_id)
+    await log_activity(ip, "vault.case.update", f"Updated case '{case.name}'", user["id"])
     return case
 
 
 @router.delete("/cases/{case_id}")
 async def delete_case(case_id: int, request: Request):
     """Delete a case and all records (owner only)."""
+    user = await require_user(request)
     ip = get_client_ip(request)
-    user_id = await storage.get_or_create_user(ip)
+    user_id = user["id"]
 
     # Get case to clean up files
     case = await storage.get_vault_case(case_id, user_id)
@@ -126,8 +137,9 @@ async def add_record(
     file: UploadFile | None = File(None),
 ):
     """Add a record to a case. Supports multipart form for file upload."""
+    user = await require_user(request)
     ip = get_client_ip(request)
-    user_id = await storage.get_or_create_user(ip)
+    user_id = user["id"]
 
     # Verify case access (any viewer can add records)
     case = await storage.get_vault_case(case_id, user_id)
@@ -181,8 +193,8 @@ async def add_record(
 @router.put("/records/{record_id}/star", response_model=VaultRecord)
 async def toggle_star(record_id: int, request: Request):
     """Toggle starred status on a record."""
-    ip = get_client_ip(request)
-    user_id = await storage.get_or_create_user(ip)
+    user = await require_user(request)
+    user_id = user["id"]
 
     # Verify access via the record's case (any viewer can toggle stars)
     record = await storage.get_vault_record(record_id)
@@ -201,8 +213,9 @@ async def toggle_star(record_id: int, request: Request):
 @router.delete("/records/{record_id}")
 async def delete_record(record_id: int, request: Request, background_tasks: BackgroundTasks):
     """Delete a vault record."""
+    user = await require_user(request)
     ip = get_client_ip(request)
-    user_id = await storage.get_or_create_user(ip)
+    user_id = user["id"]
 
     record = await storage.get_vault_record(record_id)
     if not record:
@@ -239,8 +252,9 @@ async def update_record(record_id: int, data: VaultRecordUpdate, request: Reques
     """Edit a text record (creator only, within 24 hours)."""
     from datetime import datetime, timedelta
 
+    user = await require_user(request)
     ip = get_client_ip(request)
-    user_id = await storage.get_or_create_user(ip)
+    user_id = user["id"]
 
     record = await storage.get_vault_record(record_id)
     if not record:
@@ -278,8 +292,8 @@ async def update_record(record_id: int, data: VaultRecordUpdate, request: Reques
 @router.get("/records/{record_id}/file")
 async def get_record_file(record_id: int, request: Request):
     """Download a record's attached file."""
-    ip = get_client_ip(request)
-    user_id = await storage.get_or_create_user(ip)
+    user = await require_user(request)
+    user_id = user["id"]
 
     record = await storage.get_vault_record(record_id)
     if not record or not record.filename:
@@ -304,10 +318,10 @@ async def get_record_file(record_id: int, request: Request):
 @router.get("/records/search")
 async def search_records(q: str, request: Request, case_id: int | None = None):
     """Full-text search across vault records."""
+    user = await require_user(request)
     ip = get_client_ip(request)
-    user_id = await storage.get_or_create_user(ip)
-    results = await storage.search_vault_records(user_id, q, case_id)
-    await log_activity(ip, "vault.search", f"Searched vault for '{q}'", user_id)
+    results = await storage.search_vault_records(user["id"], q, case_id)
+    await log_activity(ip, "vault.search", f"Searched vault for '{q}'", user["id"])
     return results
 
 
@@ -356,6 +370,7 @@ async def generate_case_ai_summary(case_id: int):
 
         # Build record context
         record_lines = []
+        all_text = []
         for r in records:
             if r["record_type"] == "text":
                 snippet = (r["content"] or "")[:300]
@@ -364,11 +379,18 @@ async def generate_case_ai_summary(case_id: int):
             record_lines.append(
                 f"- [{r['record_date']}] {r['title'] or 'Untitled'} ({r['record_type']}): {snippet}"
             )
+            all_text.append(snippet)
+
+        # Detect record language so the summary matches
+        sample_text = " ".join(all_text)[:2000]
+        detected = _LANG_DETECTOR.detect_language_of(sample_text)
+        lang_name = _LINGUA_NAMES.get(detected, "English") if detected else "English"
+        lang_instruction = f" Write the summary in {lang_name}." if lang_name != "English" else ""
 
         prompt = (
             f"Write a brief factual summary of this case. State only what the records say — "
             f"no interpretation, no speculation, no filler. Use short sentences. "
-            f"List key dates and facts. 150 words maximum.\n\n"
+            f"List key dates and facts. 150 words maximum.{lang_instruction}\n\n"
             f"Case: {case_info['name']} ({case_info['identifier']})\n"
             f"Description: {case_info['description'] or 'N/A'}\n\n"
             f"Records (chronological):\n" + "\n".join(record_lines)

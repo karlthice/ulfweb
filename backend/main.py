@@ -3,13 +3,15 @@
 from contextlib import asynccontextmanager
 from pathlib import Path
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, RedirectResponse
+
+from backend.auth import require_admin
 
 from backend.config import settings
 from backend.database import init_database
-from backend.routers import admin, chat, conversations, documents, models, settings as settings_router, stt, translate, tts, vault
+from backend.routers import admin, auth, chat, conversations, documents, models, settings as settings_router, stt, translate, tts, users, vault
 from backend.services.llama_manager import llama_manager
 
 
@@ -31,6 +33,8 @@ app = FastAPI(
 )
 
 # Include API routers
+app.include_router(auth.router, prefix="/api/v1")
+app.include_router(users.router, prefix="/api/v1")
 app.include_router(conversations.router, prefix="/api/v1")
 app.include_router(settings_router.router, prefix="/api/v1")
 app.include_router(chat.router, prefix="/api/v1")
@@ -55,9 +59,19 @@ async def serve_index():
     return FileResponse(frontend_path / "index.html")
 
 
+@app.get("/login")
+async def serve_login():
+    """Serve the login HTML page."""
+    return FileResponse(frontend_path / "login.html")
+
+
 @app.get("/admin")
-async def serve_admin():
-    """Serve the admin HTML page."""
+async def serve_admin(request: Request):
+    """Serve the admin HTML page (admin users only)."""
+    try:
+        await require_admin(request)
+    except Exception:
+        return RedirectResponse(url="/")
     return FileResponse(frontend_path / "admin.html")
 
 

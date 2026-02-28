@@ -4,6 +4,7 @@ from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import Response
 from pydantic import BaseModel
 
+from backend.auth import get_client_ip, require_user
 from backend.services.storage import log_activity
 from backend.services.tts_service import tts_service
 
@@ -23,14 +24,6 @@ class TTSResponse(BaseModel):
 
     detected_language: str
     available: bool
-
-
-def get_client_ip(request: Request) -> str:
-    """Extract client IP from request."""
-    forwarded = request.headers.get("X-Forwarded-For")
-    if forwarded:
-        return forwarded.split(",")[0].strip()
-    return request.client.host if request.client else "127.0.0.1"
 
 
 @router.post("")

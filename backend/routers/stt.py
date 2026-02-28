@@ -7,20 +7,13 @@ import time
 from fastapi import APIRouter, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import StreamingResponse
 
+from backend.auth import get_client_ip, require_user
 from backend.services.meeting_session import meeting_session_manager
 from backend.services.stt_service import stt_service
 from backend.services.storage import get_admin_settings, log_activity
 
 
 router = APIRouter(prefix="/stt", tags=["stt"])
-
-
-def get_client_ip(request: Request) -> str:
-    """Extract client IP from request."""
-    forwarded = request.headers.get("X-Forwarded-For")
-    if forwarded:
-        return forwarded.split(",")[0].strip()
-    return request.client.host if request.client else "127.0.0.1"
 
 
 @router.post("")
@@ -33,6 +26,7 @@ async def transcribe_audio(
 
     Accepts audio file (webm, wav, mp3, etc.) and returns transcription.
     """
+    await require_user(request)
     audio_bytes = await audio.read()
     if not audio_bytes:
         raise HTTPException(status_code=400, detail="No audio data provided")
