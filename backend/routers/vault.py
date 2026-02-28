@@ -90,6 +90,198 @@ async def get_case(case_id: int, request: Request):
     return case
 
 
+@router.get("/cases/{case_id}/export")
+async def export_case_pdf(case_id: int, request: Request):
+    """Export a case and all its records as a PDF document."""
+    from fastapi.responses import Response
+    from fpdf import FPDF
+
+    user = await require_user(request)
+    case = await storage.get_vault_case(case_id, user["id"])
+    if not case:
+        raise HTTPException(status_code=404, detail="Case not found")
+
+    pdf = FPDF()
+    pdf.set_auto_page_break(auto=True, margin=20)
+
+    # Use DejaVu Sans for full Unicode support
+    _font_dir = "/usr/share/fonts/truetype/dejavu"
+    pdf.add_font("DejaVu", "", f"{_font_dir}/DejaVuSans.ttf", uni=True)
+    pdf.add_font("DejaVu", "B", f"{_font_dir}/DejaVuSans-Bold.ttf", uni=True)
+
+    pdf.add_page()
+
+    # Title
+    pdf.set_font("DejaVu", "B", 18)
+    pdf.cell(0, 10, case.name, new_x="LMARGIN", new_y="NEXT")
+
+    # Metadata line
+    pdf.set_font("DejaVu", "", 10)
+    meta_parts = [
+        f"Identifier: {case.identifier}",
+        f"Status: {case.status}",
+        "Public" if case.is_public else "Private",
+    ]
+    pdf.set_text_color(100, 100, 100)
+    pdf.cell(0, 6, "  |  ".join(meta_parts), new_x="LMARGIN", new_y="NEXT")
+    pdf.set_text_color(0, 0, 0)
+
+    # Description
+    if case.description:
+        pdf.ln(4)
+        pdf.set_font("DejaVu", "", 10)
+        pdf.multi_cell(0, 5, case.description)
+
+    # AI Summary
+    if case.ai_summary:
+        pdf.ln(6)
+        pdf.set_font("DejaVu", "B", 12)
+        pdf.cell(0, 8, "AI Summary", new_x="LMARGIN", new_y="NEXT")
+        pdf.set_font("DejaVu", "", 10)
+        pdf.multi_cell(0, 5, case.ai_summary)
+
+    # Records
+    records = case.records or []
+    if records:
+        pdf.ln(6)
+        pdf.set_font("DejaVu", "B", 12)
+        pdf.cell(0, 8, f"Records ({len(records)})", new_x="LMARGIN", new_y="NEXT")
+
+        for r in records:
+            pdf.ln(4)
+            # Separator line
+            pdf.set_draw_color(200, 200, 200)
+            pdf.line(pdf.l_margin, pdf.get_y(), pdf.w - pdf.r_margin, pdf.get_y())
+            pdf.ln(2)
+
+            # Record header: date, title, type
+            pdf.set_font("DejaVu", "B", 10)
+            starred = "[*] " if r.starred else ""
+            title = r.title or "Untitled"
+            pdf.cell(0, 6, f"{starred}{r.record_date}  -  {title}  ({r.record_type})", new_x="LMARGIN", new_y="NEXT")
+
+            # File info
+            if r.original_filename:
+                pdf.set_font("DejaVu", "", 9)
+                pdf.set_text_color(100, 100, 100)
+                size_str = f"  ({_format_size(r.file_size)})" if r.file_size else ""
+                pdf.cell(0, 5, f"File: {r.original_filename}{size_str}", new_x="LMARGIN", new_y="NEXT")
+                pdf.set_text_color(0, 0, 0)
+
+            # Content (text records)
+            if r.content:
+                pdf.set_font("DejaVu", "", 10)
+                pdf.multi_cell(0, 5, r.content)
+
+            # Embed image for image records
+            if r.record_type == "image" and r.filename:
+                _embed_image(pdf, VAULT_DIR / r.filename)
+
+            # Embed PDF pages for document records
+            if r.record_type == "document" and r.filename and (r.original_filename or "").lower().endswith(".pdf"):
+                _embed_pdf_pages(pdf, VAULT_DIR / r.filename)
+
+            # AI description (document/image records)
+            if r.ai_description:
+                pdf.set_font("DejaVu", "", 9)
+                pdf.set_text_color(80, 80, 80)
+                pdf.multi_cell(0, 5, f"AI Description: {r.ai_description}")
+                pdf.set_text_color(0, 0, 0)
+
+    # Footer with export timestamp
+    pdf.ln(10)
+    pdf.set_font("DejaVu", "", 8)
+    pdf.set_text_color(150, 150, 150)
+    from datetime import datetime
+    pdf.cell(0, 5, f"Exported {datetime.utcnow().strftime('%Y-%m-%d %H:%M UTC')}", new_x="LMARGIN", new_y="NEXT")
+
+    pdf_bytes = pdf.output()
+    safe_name = re.sub(r'[^\w\s-]', '', case.name).strip().replace(' ', '_')
+    filename = f"{safe_name}_{case.identifier}.pdf"
+
+    return Response(
+        content=bytes(pdf_bytes),
+        media_type="application/pdf",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
+def _format_size(size_bytes: int | None) -> str:
+    """Format file size for display."""
+    if not size_bytes:
+        return ""
+    if size_bytes < 1024:
+        return f"{size_bytes} B"
+    if size_bytes < 1024 * 1024:
+        return f"{size_bytes / 1024:.1f} KB"
+    return f"{size_bytes / (1024 * 1024):.1f} MB"
+
+
+def _embed_image(pdf, file_path: Path, max_width: float = 170) -> None:
+    """Embed an image record into the PDF, scaled to fit the page width."""
+    import io
+
+    try:
+        img_bytes = _read_vault_file(file_path)
+        img_stream = io.BytesIO(img_bytes)
+        pdf.image(img_stream, w=max_width, keep_aspect_ratio=True)
+    except Exception:
+        pdf.set_font("DejaVu", "", 9)
+        pdf.set_text_color(150, 50, 50)
+        pdf.cell(0, 5, "[Image could not be embedded]", new_x="LMARGIN", new_y="NEXT")
+        pdf.set_text_color(0, 0, 0)
+
+
+def _embed_pdf_pages(pdf, file_path: Path, max_width: float = 170) -> None:
+    """Render pages from an attached PDF and embed them as images."""
+    import io
+
+    try:
+        from pypdf import PdfReader
+        from PIL import Image
+
+        pdf_bytes = _read_vault_file(file_path)
+        reader = PdfReader(io.BytesIO(pdf_bytes))
+
+        for i, page in enumerate(reader.pages):
+            # Extract images from each page
+            images_on_page = []
+            for image_obj in page.images:
+                try:
+                    img_stream = io.BytesIO(image_obj.data)
+                    img = Image.open(img_stream)
+                    # Convert CMYK/palette to RGB for fpdf2 compatibility
+                    if img.mode not in ("RGB", "L"):
+                        img = img.convert("RGB")
+                    images_on_page.append(img)
+                except Exception:
+                    continue
+
+            if images_on_page:
+                for img in images_on_page:
+                    buf = io.BytesIO()
+                    img.save(buf, format="PNG")
+                    buf.seek(0)
+                    pdf.image(buf, w=max_width, keep_aspect_ratio=True)
+            else:
+                # No extractable images — note the page
+                pdf.set_font("DejaVu", "", 9)
+                pdf.set_text_color(100, 100, 100)
+                pdf.cell(0, 5, f"[PDF page {i + 1}: no extractable images]", new_x="LMARGIN", new_y="NEXT")
+                pdf.set_text_color(0, 0, 0)
+
+    except ImportError:
+        pdf.set_font("DejaVu", "", 9)
+        pdf.set_text_color(150, 50, 50)
+        pdf.cell(0, 5, "[PDF embedding unavailable — missing dependencies]", new_x="LMARGIN", new_y="NEXT")
+        pdf.set_text_color(0, 0, 0)
+    except Exception:
+        pdf.set_font("DejaVu", "", 9)
+        pdf.set_text_color(150, 50, 50)
+        pdf.cell(0, 5, "[PDF pages could not be embedded]", new_x="LMARGIN", new_y="NEXT")
+        pdf.set_text_color(0, 0, 0)
+
+
 @router.put("/cases/{case_id}", response_model=VaultCase)
 async def update_case(case_id: int, data: VaultCaseUpdate, request: Request):
     """Update a case (owner only)."""

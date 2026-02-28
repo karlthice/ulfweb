@@ -311,7 +311,7 @@ async def init_database() -> None:
 
     if is_encrypted():
         connector = _make_encrypted_connector(db_path, get_db_key())
-        db_ctx = aiosqlite.Connection(connector)
+        db_ctx = aiosqlite.Connection(connector, iter_chunk_size=64)
     else:
         db_ctx = aiosqlite.connect(db_path)
 
@@ -584,12 +584,15 @@ async def init_database() -> None:
 async def get_db() -> AsyncGenerator[aiosqlite.Connection, None]:
     """Get a database connection."""
     if is_encrypted():
+        from sqlcipher3 import dbapi2 as sqlcipher
         connector = _make_encrypted_connector(settings.database.path, get_db_key())
-        db = aiosqlite.Connection(connector)
+        db = aiosqlite.Connection(connector, iter_chunk_size=64)
+        await db.__aenter__()
+        db.row_factory = sqlcipher.Row
     else:
         db = aiosqlite.connect(settings.database.path)
-    await db.__aenter__()
-    db.row_factory = aiosqlite.Row
+        await db.__aenter__()
+        db.row_factory = aiosqlite.Row
     # Override LOWER() to handle Unicode (SQLite built-in only handles ASCII)
     await db.create_function("LOWER", 1, lambda s: s.lower() if s else s)
     try:

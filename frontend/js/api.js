@@ -412,6 +412,10 @@ const api = {
         return `${API_BASE}/vault/records/${recordId}/file`;
     },
 
+    getVaultCaseExportUrl(caseId) {
+        return `${API_BASE}/vault/cases/${caseId}/export`;
+    },
+
     async getDateFormat() {
         try {
             const response = await fetch(`${API_BASE}/admin/date-format`);

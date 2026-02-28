@@ -204,6 +204,7 @@ const vault = {
                     <option value="private" ${!c.is_public ? 'selected' : ''}>Private</option>
                     <option value="public" ${c.is_public ? 'selected' : ''}>Public</option>
                 </select>
+                <button class="vault-btn vault-btn-secondary" id="vault-export-pdf-btn">Export PDF</button>
                 <button class="vault-btn vault-btn-danger" id="vault-delete-case-btn">Delete Case</button>
                 <button class="vault-btn vault-btn-chat" id="vault-chat-case-btn">Chat</button>
             </div>
@@ -212,6 +213,9 @@ const vault = {
         document.getElementById('vault-add-record-btn').addEventListener('click', () => this.showAddRecordForm());
         document.getElementById('vault-status-select').addEventListener('change', (e) => this.updateCaseStatus(e.target.value));
         document.getElementById('vault-visibility-select').addEventListener('change', (e) => this.updateCaseVisibility(e.target.value));
+        document.getElementById('vault-export-pdf-btn').addEventListener('click', () => {
+            window.open(api.getVaultCaseExportUrl(this.currentCase.id), '_blank');
+        });
         document.getElementById('vault-delete-case-btn').addEventListener('click', () => this.deleteCase());
         document.getElementById('vault-chat-case-btn').addEventListener('click', () => this.chatAboutCase());
 
