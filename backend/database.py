@@ -1,5 +1,8 @@
 """SQLite database initialization and connection management."""
 
+import logging
+import shutil
+
 import aiosqlite
 from pathlib import Path
 from contextlib import asynccontextmanager
@@ -7,6 +10,56 @@ from typing import AsyncGenerator
 
 from backend.config import settings
 from backend.auth import hash_password
+from backend.encryption import get_db_key, init_encryption_key, is_encrypted
+
+logger = logging.getLogger("ulfweb")
+
+
+def _make_encrypted_connector(db_path: str | Path, hex_key: str):
+    """Return a callable that creates an encrypted SQLCipher connection."""
+    from sqlcipher3 import dbapi2 as sqlcipher
+
+    def connector():
+        conn = sqlcipher.connect(str(db_path))
+        conn.execute(f"PRAGMA key=\"x'{hex_key}'\"")
+        return conn
+    return connector
+
+
+def _migrate_to_encrypted(db_path: Path, hex_key: str) -> None:
+    """Migrate an unencrypted SQLite database to SQLCipher in-place."""
+    from sqlcipher3 import dbapi2 as sqlcipher
+
+    # Test if the DB is unencrypted by trying to read it without a key
+    try:
+        conn = sqlcipher.connect(str(db_path))
+        conn.execute("SELECT count(*) FROM sqlite_master")
+        # If we get here, the DB is unencrypted (readable without key)
+        conn.close()
+    except Exception:
+        # DB is either encrypted already or doesn't exist — nothing to migrate
+        return
+
+    logger.info("Migrating unencrypted database to SQLCipher...")
+    encrypted_path = db_path.with_suffix(".db.encrypted")
+
+    conn = sqlcipher.connect(str(db_path))
+    try:
+        conn.execute(f"ATTACH DATABASE '{encrypted_path}' AS encrypted KEY \"x'{hex_key}'\"")
+        conn.execute("SELECT sqlcipher_export('encrypted')")
+        conn.execute("DETACH DATABASE encrypted")
+    finally:
+        conn.close()
+
+    # Replace original with encrypted copy
+    backup_path = db_path.with_suffix(".db.unencrypted_backup")
+    shutil.move(str(db_path), str(backup_path))
+    shutil.move(str(encrypted_path), str(db_path))
+    logger.info(
+        "Database migration complete. Unencrypted backup saved as %s — "
+        "delete it once you've verified encryption works.",
+        backup_path,
+    )
 
 
 SCHEMA = """
@@ -249,7 +302,20 @@ async def init_database() -> None:
     db_path = Path(settings.database.path)
     db_path.parent.mkdir(parents=True, exist_ok=True)
 
-    async with aiosqlite.connect(db_path) as db:
+    # Initialize encryption key (generates on first run)
+    init_encryption_key()
+
+    # Migrate existing unencrypted DB if needed
+    if is_encrypted() and db_path.exists():
+        _migrate_to_encrypted(db_path, get_db_key())
+
+    if is_encrypted():
+        connector = _make_encrypted_connector(db_path, get_db_key())
+        db_ctx = aiosqlite.Connection(connector)
+    else:
+        db_ctx = aiosqlite.connect(db_path)
+
+    async with db_ctx as db:
         await db.executescript(SCHEMA)
         await db.commit()
 
@@ -517,7 +583,12 @@ async def init_database() -> None:
 @asynccontextmanager
 async def get_db() -> AsyncGenerator[aiosqlite.Connection, None]:
     """Get a database connection."""
-    db = await aiosqlite.connect(settings.database.path)
+    if is_encrypted():
+        connector = _make_encrypted_connector(settings.database.path, get_db_key())
+        db = aiosqlite.Connection(connector)
+    else:
+        db = aiosqlite.connect(settings.database.path)
+    await db.__aenter__()
     db.row_factory = aiosqlite.Row
     # Override LOWER() to handle Unicode (SQLite built-in only handles ASCII)
     await db.create_function("LOWER", 1, lambda s: s.lower() if s else s)

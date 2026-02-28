@@ -1,5 +1,6 @@
 """FastAPI application entry point for ulfweb."""
 
+import logging
 from contextlib import asynccontextmanager
 from pathlib import Path
 
@@ -14,12 +15,28 @@ from backend.database import init_database
 from backend.routers import admin, auth, chat, conversations, documents, models, settings as settings_router, stt, translate, tts, users, vault
 from backend.services.llama_manager import llama_manager
 
+logger = logging.getLogger("ulfweb")
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Application lifespan handler."""
-    # Initialize database on startup
+    # Initialize database on startup (also initializes encryption key)
     await init_database()
+
+    # Encrypt existing vault files if needed
+    vault.migrate_vault_files()
+
+    # Log encryption status
+    if settings.encryption.enabled:
+        logger.warning(
+            "Encryption at rest ENABLED — key file: %s — "
+            "BACK UP THIS FILE SEPARATELY. If lost, all data is unrecoverable.",
+            settings.encryption.key_file,
+        )
+    else:
+        logger.info("Encryption at rest is DISABLED")
+
     yield
     # Cleanup llama.cpp processes on shutdown
     llama_manager.cleanup()

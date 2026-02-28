@@ -41,6 +41,11 @@ class ModelsConfig(BaseModel):
     llama_server: str = "llama-server"
 
 
+class EncryptionConfig(BaseModel):
+    enabled: bool = True
+    key_file: str = "data/encryption.key"
+
+
 class TTSConfig(BaseModel):
     voices_path: str = "data/voices"
     voice_mapping: dict[str, str] = {
@@ -64,6 +69,7 @@ class Settings(BaseSettings):
     defaults: DefaultsConfig = DefaultsConfig()
     models: ModelsConfig = ModelsConfig()
     tts: TTSConfig = TTSConfig()
+    encryption: EncryptionConfig = EncryptionConfig()
 
     class Config:
         env_prefix = "ULFWEB_"
@@ -96,6 +102,10 @@ def load_config(config_path: str | None = None) -> Settings:
         config_data.setdefault("models", {})["path"] = os.getenv("ULFWEB_MODELS_PATH")
     if os.getenv("ULFWEB_LLAMA_SERVER"):
         config_data.setdefault("models", {})["llama_server"] = os.getenv("ULFWEB_LLAMA_SERVER")
+    if os.getenv("ULFWEB_ENCRYPTION_ENABLED"):
+        config_data.setdefault("encryption", {})["enabled"] = os.getenv("ULFWEB_ENCRYPTION_ENABLED").lower() in ("true", "1", "yes")
+    if os.getenv("ULFWEB_ENCRYPTION_KEY_FILE"):
+        config_data.setdefault("encryption", {})["key_file"] = os.getenv("ULFWEB_ENCRYPTION_KEY_FILE")
 
     return Settings(**config_data)
 

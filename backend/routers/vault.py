@@ -1,6 +1,7 @@
 """API routes for the Vault (case records management)."""
 
 import json
+import logging
 import uuid
 from pathlib import Path
 
@@ -9,6 +10,7 @@ from lingua import Language, LanguageDetectorBuilder
 from fastapi import APIRouter, BackgroundTasks, File, Form, HTTPException, Request, UploadFile
 
 from backend.auth import get_client_ip, require_user
+from backend.encryption import encrypt_file, decrypt_file, is_encrypted
 from backend.models import (
     VaultCase,
     VaultCaseCreate,
@@ -156,8 +158,9 @@ async def add_record(
         ext = Path(file.filename).suffix if file.filename else ""
         filename = f"{uuid.uuid4().hex}{ext}"
         file_path = VAULT_DIR / filename
+        stored_content = encrypt_file(file_content) if is_encrypted() else file_content
         with open(file_path, "wb") as f:
-            f.write(file_content)
+            f.write(stored_content)
         original_filename = file.filename
 
     record = await storage.create_vault_record(
@@ -307,11 +310,20 @@ async def get_record_file(record_id: int, request: Request):
     if not file_path.exists():
         raise HTTPException(status_code=404, detail="File not found on disk")
 
-    from fastapi.responses import FileResponse
-    return FileResponse(
-        file_path,
-        filename=record.original_filename or record.filename,
-    )
+    if is_encrypted():
+        from fastapi.responses import Response
+        file_data = decrypt_file(file_path.read_bytes())
+        return Response(
+            content=file_data,
+            media_type=_get_mime_type(file_path),
+            headers={"Content-Disposition": f'attachment; filename="{record.original_filename or record.filename}"'},
+        )
+    else:
+        from fastapi.responses import FileResponse
+        return FileResponse(
+            file_path,
+            filename=record.original_filename or record.filename,
+        )
 
 
 # Record search
@@ -463,8 +475,7 @@ async def generate_ai_description(
 
         elif record_type == "image":
             import base64
-            with open(file_path, "rb") as f:
-                img_data = base64.b64encode(f.read()).decode()
+            img_data = base64.b64encode(_read_vault_file(file_path)).decode()
 
             mime = "image/png"
             suffix = file_path.suffix.lower()
@@ -515,7 +526,21 @@ async def generate_ai_description(
         await log_activity("system", "vault.description.fail", f"Failed to generate description for '{file_label}': {e}")
 
 
+import mimetypes
 import re
+
+
+def _get_mime_type(file_path: Path) -> str:
+    """Guess MIME type from file extension."""
+    mime, _ = mimetypes.guess_type(str(file_path))
+    return mime or "application/octet-stream"
+
+
+def _read_vault_file(file_path: Path) -> bytes:
+    """Read a vault file, decrypting if encryption is enabled."""
+    raw = file_path.read_bytes()
+    return decrypt_file(raw) if is_encrypted() else raw
+
 
 def _clean_llm_output(text: str) -> str:
     """Strip thinking tags and duplicated content from LLM output."""
@@ -529,10 +554,11 @@ def _clean_llm_output(text: str) -> str:
 
 
 async def _extract_pdf_text(file_path: Path) -> str:
-    """Extract text from a PDF file."""
+    """Extract text from a PDF file (handles encrypted vault files)."""
     try:
         import fitz  # PyMuPDF
-        doc = fitz.open(str(file_path))
+        pdf_bytes = _read_vault_file(file_path)
+        doc = fitz.open(stream=pdf_bytes, filetype="pdf")
         text = ""
         for page in doc:
             text += page.get_text() + "\n"
@@ -542,3 +568,35 @@ async def _extract_pdf_text(file_path: Path) -> str:
         return ""
     except Exception:
         return ""
+
+
+def migrate_vault_files() -> None:
+    """Encrypt existing unencrypted vault files in-place.
+
+    Fernet-encrypted data always starts with 'gAAAAA' (base64 token prefix).
+    Files that don't start with this prefix are treated as unencrypted.
+    """
+    _logger = logging.getLogger("ulfweb")
+
+    if not is_encrypted():
+        return
+
+    if not VAULT_DIR.exists():
+        return
+
+    migrated = 0
+    for file_path in VAULT_DIR.iterdir():
+        if not file_path.is_file():
+            continue
+        raw = file_path.read_bytes()
+        if not raw:
+            continue
+        # Fernet tokens start with 'gAAAAA' in base64
+        if raw[:6] == b"gAAAAA":
+            continue
+        encrypted = encrypt_file(raw)
+        file_path.write_bytes(encrypted)
+        migrated += 1
+
+    if migrated:
+        _logger.info("Encrypted %d existing vault files in %s", migrated, VAULT_DIR)
