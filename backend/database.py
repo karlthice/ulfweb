@@ -373,6 +373,13 @@ async def init_database() -> None:
             )
             await db.commit()
 
+        # Migration: Add vault_chat_records to admin_settings
+        if "vault_chat_records" not in admin_columns:
+            await db.execute(
+                "ALTER TABLE admin_settings ADD COLUMN vault_chat_records INTEGER DEFAULT 10"
+            )
+            await db.commit()
+
         # Migration: Add date_format to admin_settings
         cursor = await db.execute("PRAGMA table_info(admin_settings)")
         admin_columns = [row[1] for row in await cursor.fetchall()]

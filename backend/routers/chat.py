@@ -49,22 +49,26 @@ async def stream_chat_response(
 
     # Resolve server early so we can use ctx_size for the token budget
     server_url = settings.llama.url
+    server_name = server_url
     ctx_budget = 32768  # fallback
     admin_cfg = await get_admin_settings()
     if admin_cfg.chat_server_id:
         server = await get_server(admin_cfg.chat_server_id)
         if server and server.active:
             server_url = server.url
+            server_name = server.friendly_name
             ctx_budget = server.ctx_size
         else:
             active_servers = await list_servers(active_only=True)
             if active_servers:
                 server_url = active_servers[0].url
+                server_name = active_servers[0].friendly_name
                 ctx_budget = active_servers[0].ctx_size
     else:
         active_servers = await list_servers(active_only=True)
         if active_servers:
             server_url = active_servers[0].url
+            server_name = active_servers[0].friendly_name
             ctx_budget = active_servers[0].ctx_size
 
     # Build messages for llama.cpp API
@@ -76,8 +80,9 @@ async def stream_chat_response(
         system_parts.append(user_settings.system_prompt)
 
     if case_refs:
+        vault_chat_records = admin_cfg.vault_chat_records
         for case_id in case_refs:
-            ctx = await get_vault_case_context(case_id, user_id)
+            ctx = await get_vault_case_context(case_id, user_id, max_recent=vault_chat_records)
             if ctx:
                 system_parts.append(ctx)
 
@@ -137,6 +142,9 @@ async def stream_chat_response(
     }
 
     assistant_content = ""
+
+    # Tell the frontend which server is handling this request
+    yield f"data: {json.dumps({'type': 'server_info', 'server_name': server_name})}\n\n"
 
     try:
         async with httpx.AsyncClient(timeout=None) as client:

@@ -735,7 +735,7 @@ async def get_admin_settings() -> AdminSettings:
                       document_ai_understanding_server_id, translation_server_id,
                       chat_server_id, skip_contextual_retrieval, whisper_model,
                       vault_image_server_id, vault_text_server_id,
-                      date_format, single_user
+                      vault_chat_records, date_format, single_user
                FROM admin_settings WHERE id = 1"""
         )
         row = await cursor.fetchone()
@@ -750,6 +750,7 @@ async def get_admin_settings() -> AdminSettings:
                 whisper_model=row["whisper_model"] or "large-v3-turbo",
                 vault_image_server_id=row["vault_image_server_id"],
                 vault_text_server_id=row["vault_text_server_id"],
+                vault_chat_records=row["vault_chat_records"] if row["vault_chat_records"] is not None else 10,
                 date_format=row["date_format"] or "YYYY-MM-DD",
                 single_user=row["single_user"] or "",
             )
@@ -768,6 +769,7 @@ async def update_admin_settings(updates: dict[str, Any]) -> AdminSettings:
         "whisper_model",
         "vault_image_server_id",
         "vault_text_server_id",
+        "vault_chat_records",
         "date_format",
         "single_user",
     )
@@ -1038,8 +1040,11 @@ async def update_vault_case_ai_summary(case_id: int, ai_summary: str) -> None:
         await db.commit()
 
 
-async def get_vault_case_context(case_id: int, user_id: int, max_recent: int = 5) -> str | None:
-    """Build context string for @Case injection into chat. Returns None if not accessible."""
+async def get_vault_case_context(case_id: int, user_id: int, max_recent: int = 10) -> str | None:
+    """Build context string for @Case injection into chat. Returns None if not accessible.
+
+    max_recent: number of recent unstarred records to include. 0 means all.
+    """
     async with get_db() as db:
         # Verify access
         cursor = await db.execute(
@@ -1078,14 +1083,24 @@ async def get_vault_case_context(case_id: int, user_id: int, max_recent: int = 5
                 parts.append(f'- {r["record_date"]} "{r["title"]}": {text}')
 
         # Get recent unstarred records
-        cursor = await db.execute(
-            """SELECT title, content, ai_description, record_type, record_date
-               FROM vault_records
-               WHERE case_id = ? AND starred = 0
-               ORDER BY record_date DESC
-               LIMIT ?""",
-            (case_id, max_recent)
-        )
+        if max_recent == 0:
+            # All unstarred records
+            cursor = await db.execute(
+                """SELECT title, content, ai_description, record_type, record_date
+                   FROM vault_records
+                   WHERE case_id = ? AND starred = 0
+                   ORDER BY record_date DESC""",
+                (case_id,)
+            )
+        else:
+            cursor = await db.execute(
+                """SELECT title, content, ai_description, record_type, record_date
+                   FROM vault_records
+                   WHERE case_id = ? AND starred = 0
+                   ORDER BY record_date DESC
+                   LIMIT ?""",
+                (case_id, max_recent)
+            )
         recent = await cursor.fetchall()
 
         if recent:

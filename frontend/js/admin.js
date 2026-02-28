@@ -150,6 +150,9 @@ const admin = {
         document.getElementById('vault-text-server').addEventListener('change', (e) => {
             this.saveDocumentAiSetting('vault_text_server_id', e.target.value);
         });
+        document.getElementById('vault-chat-records').addEventListener('change', (e) => {
+            this.saveDocumentAiSetting('vault_chat_records', e.target.value);
+        });
 
         // Skip contextual retrieval checkbox
         document.getElementById('skip-contextual-retrieval').addEventListener('change', (e) => {
@@ -1038,6 +1041,12 @@ const admin = {
             whisperSelect.value = this.adminSettings.whisper_model;
         }
 
+        // Set vault chat records dropdown
+        const vaultChatRecords = document.getElementById('vault-chat-records');
+        if (vaultChatRecords && this.adminSettings.vault_chat_records != null) {
+            vaultChatRecords.value = this.adminSettings.vault_chat_records;
+        }
+
         // Set date format dropdown
         const dateFormatSelect = document.getElementById('date-format-select');
         if (dateFormatSelect && this.adminSettings.date_format) {
@@ -1095,11 +1104,14 @@ const admin = {
             // Booleans (e.g. skip_contextual_retrieval) pass through as-is
             // String settings (e.g. whisper_model) pass through as-is
             const stringSettings = ['whisper_model', 'date_format'];
+            const intSettings = ['vault_chat_records'];
             let parsed;
             if (typeof value === 'boolean') {
                 parsed = value;
             } else if (stringSettings.includes(settingKey)) {
                 parsed = value || null;
+            } else if (intSettings.includes(settingKey)) {
+                parsed = parseInt(value);
             } else {
                 parsed = value ? parseInt(value) : null;
             }

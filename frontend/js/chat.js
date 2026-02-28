@@ -685,7 +685,11 @@ const chat = {
                 this.stopStreaming();
             },
             imageBase64,
-            currentCaseRefs
+            currentCaseRefs,
+            // onServerInfo
+            (serverName) => {
+                tokensCounter.title = serverName;
+            }
         );
     },
 

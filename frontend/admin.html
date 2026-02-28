@@ -137,6 +137,16 @@
                         </select>
                         <p class="setting-hint">The AI server used to analyze and summarize uploaded documents.</p>
                     </div>
+                    <div class="setting-group">
+                        <label for="vault-chat-records">Chat Context Records</label>
+                        <select id="vault-chat-records">
+                            <option value="5">5</option>
+                            <option value="10" selected>10</option>
+                            <option value="20">20</option>
+                            <option value="0">All</option>
+                        </select>
+                        <p class="setting-hint">Number of recent (non-starred) records included in chat context when referencing a case. Starred records are always included.</p>
+                    </div>
                 </div>
             </section>
 

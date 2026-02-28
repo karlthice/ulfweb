@@ -212,6 +212,7 @@ class AdminSettings(BaseModel):
     whisper_model: str = "large-v3-turbo"
     vault_image_server_id: int | None = None
     vault_text_server_id: int | None = None
+    vault_chat_records: int = 10
     date_format: str = "YYYY-MM-DD"
     single_user: str = ""
 
@@ -226,6 +227,7 @@ class AdminSettingsUpdate(BaseModel):
     whisper_model: str | None = None
     vault_image_server_id: int | None = None
     vault_text_server_id: int | None = None
+    vault_chat_records: int | None = None
     date_format: str | None = None
     single_user: str | None = None
 
