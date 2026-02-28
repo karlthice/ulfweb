@@ -269,8 +269,9 @@ const documents = (function() {
      * Upload a file
      */
     async function uploadFile(file) {
-        if (!file.name.toLowerCase().endsWith('.pdf')) {
-            alert('Please select a PDF file');
+        const allowedExts = ['.pdf', '.docx'];
+        if (!allowedExts.some(ext => file.name.toLowerCase().endsWith(ext))) {
+            alert('Please select a PDF or DOCX file');
             return;
         }
 

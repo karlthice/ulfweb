@@ -665,6 +665,16 @@ async def generate_ai_description(
             prompt = f"Summarize the following document concisely:\n\n{text}"
             messages = [{"role": "user", "content": prompt}]
 
+        elif record_type == "document" and file_path.suffix.lower() == ".docx":
+            # Extract text from DOCX
+            text = await _extract_docx_text(file_path)
+            if not text:
+                await log_activity("system", "vault.description.fail", f"Could not extract text from '{file_label}'")
+                return
+            text = text[:8000]
+            prompt = f"Summarize the following document concisely:\n\n{text}"
+            messages = [{"role": "user", "content": prompt}]
+
         elif record_type == "image":
             import base64
             img_data = base64.b64encode(_read_vault_file(file_path)).decode()
@@ -743,6 +753,21 @@ def _clean_llm_output(text: str) -> str:
     # Remove (Word count: N) artifacts
     text = re.sub(r"\(Word count:\s*\d+\)\s*", "", text)
     return text.strip()
+
+
+async def _extract_docx_text(file_path: Path) -> str:
+    """Extract text from a DOCX file (handles encrypted vault files)."""
+    try:
+        import io
+        from docx import Document
+        docx_bytes = _read_vault_file(file_path)
+        doc = Document(io.BytesIO(docx_bytes))
+        text = "\n".join(p.text for p in doc.paragraphs if p.text.strip())
+        return text.strip()
+    except ImportError:
+        return ""
+    except Exception:
+        return ""
 
 
 async def _extract_pdf_text(file_path: Path) -> str:

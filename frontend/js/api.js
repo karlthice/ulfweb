@@ -416,6 +416,20 @@ const api = {
         return `${API_BASE}/vault/cases/${caseId}/export`;
     },
 
+    async extractDocumentText(file) {
+        const formData = new FormData();
+        formData.append('file', file);
+        const response = await fetch(`${API_BASE}/documents/extract-text`, {
+            method: 'POST',
+            body: formData
+        });
+        if (!response.ok) {
+            const error = await response.json().catch(() => ({}));
+            throw new Error(error.detail || 'Failed to extract text');
+        }
+        return response.json();
+    },
+
     async getDateFormat() {
         try {
             const response = await fetch(`${API_BASE}/admin/date-format`);

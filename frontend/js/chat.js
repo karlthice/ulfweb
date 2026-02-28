@@ -61,14 +61,14 @@ const chat = {
             document.getElementById('image-input').click();
         });
 
-        // PDF file change handler
+        // Document file change handler (PDF and DOCX)
         pdfInput.addEventListener('change', async (e) => {
             const file = e.target.files[0];
             if (!file) return;
 
             // Check file size
             if (file.size > this.MAX_PDF_SIZE) {
-                alert(`PDF file is too large. Maximum size is ${this.MAX_PDF_SIZE / 1024 / 1024}MB.`);
+                alert(`File is too large. Maximum size is ${this.MAX_PDF_SIZE / 1024 / 1024}MB.`);
                 pdfInput.value = '';
                 return;
             }
@@ -77,10 +77,19 @@ const chat = {
                 attachBtn.disabled = true;
                 attachBtn.innerHTML = '<span class="icon">⏳</span>';
 
-                const text = await this.extractPdfText(file);
+                let text;
+                const isPdf = file.name.toLowerCase().endsWith('.pdf');
+
+                if (isPdf) {
+                    text = await this.extractPdfText(file);
+                } else {
+                    // DOCX and other formats: use server-side extraction
+                    const result = await api.extractDocumentText(file);
+                    text = result.text || '';
+                }
 
                 if (text.length === 0) {
-                    alert('Could not extract text from PDF. The file may be image-based or protected.');
+                    alert('Could not extract text from document. The file may be image-based or protected.');
                     pdfInput.value = '';
                     return;
                 }
@@ -88,7 +97,7 @@ const chat = {
                 if (text.length > this.MAX_TEXT_LENGTH) {
                     const truncated = text.substring(0, this.MAX_TEXT_LENGTH);
                     this.attachedPdfText = truncated;
-                    alert(`PDF text was truncated to ${this.MAX_TEXT_LENGTH} characters due to size limits.`);
+                    alert(`Document text was truncated to ${this.MAX_TEXT_LENGTH} characters due to size limits.`);
                 } else {
                     this.attachedPdfText = text;
                 }
@@ -97,8 +106,8 @@ const chat = {
                 this.showAttachmentIndicator(file.name);
 
             } catch (error) {
-                console.error('Failed to extract PDF text:', error);
-                alert('Failed to read PDF file. Please try another file.');
+                console.error('Failed to extract document text:', error);
+                alert('Failed to read document file. Please try another file.');
                 pdfInput.value = '';
             } finally {
                 attachBtn.disabled = false;

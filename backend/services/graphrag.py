@@ -120,6 +120,29 @@ class GraphRAGService:
                 pages.append({"page_number": i + 1, "text": text})
         return pages, len(reader.pages)
 
+    async def extract_text_from_docx(self, docx_path: Path) -> tuple[list[dict], int]:
+        """Extract text from DOCX file with per-page tracking.
+
+        DOCX files don't have real page boundaries, so each paragraph
+        is grouped into synthetic pages of ~3000 characters.
+
+        Returns:
+            (pages, page_count) — same format as extract_text_from_pdf.
+        """
+        from docx import Document as DocxDocument
+        doc = DocxDocument(docx_path)
+        full_text = "\n".join(p.text for p in doc.paragraphs if p.text.strip())
+
+        # Split into synthetic pages
+        page_size = 3000
+        pages = []
+        for i in range(0, len(full_text), page_size):
+            chunk = full_text[i:i + page_size].strip()
+            if chunk:
+                pages.append({"page_number": len(pages) + 1, "text": chunk})
+
+        return pages, len(pages) if pages else 1
+
     def chunk_text(self, pages: list[dict], max_chunk_chars: int = 2000,
                    overlap_chars: int = 300) -> list[dict]:
         """Split text into chunks with overlap, preserving paragraph boundaries.
@@ -432,8 +455,8 @@ Summary:"""
         return await self.call_llm(prompt, max_tokens=200, temperature=0.1,
                                    llm_url=llm_url)
 
-    async def process_document(self, document_id: int, pdf_path: Path) -> None:
-        """Process a PDF document: extract text, chunk, extract entities, generate embeddings.
+    async def process_document(self, document_id: int, file_path: Path) -> None:
+        """Process a document (PDF or DOCX): extract text, chunk, extract entities, generate embeddings.
 
         Pipeline:
         1. Extract text with page tracking
@@ -451,7 +474,11 @@ Summary:"""
 
         try:
             pipeline_start = time.monotonic()
-            pages, page_count = await self.extract_text_from_pdf(pdf_path)
+            suffix = file_path.suffix.lower()
+            if suffix == ".docx":
+                pages, page_count = await self.extract_text_from_docx(file_path)
+            else:
+                pages, page_count = await self.extract_text_from_pdf(file_path)
             await storage.update_document_status(document_id, "processing",
                                                  page_count=page_count)
 

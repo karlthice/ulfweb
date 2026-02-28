@@ -104,14 +104,16 @@ async def upload_document(
     if not collection:
         raise HTTPException(status_code=404, detail="Collection not found")
 
-    if not file.filename or not file.filename.lower().endswith(".pdf"):
-        raise HTTPException(status_code=400, detail="Only PDF files are allowed")
+    allowed_extensions = (".pdf", ".docx")
+    if not file.filename or not any(file.filename.lower().endswith(ext) for ext in allowed_extensions):
+        raise HTTPException(status_code=400, detail="Only PDF and DOCX files are allowed")
 
     content = await file.read()
     content_hash = hashlib.md5(content).hexdigest()
     file_size = len(content)
 
-    filename = f"{uuid.uuid4().hex}.pdf"
+    ext = Path(file.filename).suffix.lower()
+    filename = f"{uuid.uuid4().hex}{ext}"
     file_path = UPLOAD_DIR / filename
 
     with open(file_path, "wb") as f:
@@ -216,3 +218,35 @@ async def query_collection(collection_id: int, data: DocumentQuery, request: Req
             "Connection": "keep-alive",
         }
     )
+
+
+@router.post("/extract-text")
+async def extract_text(request: Request, file: UploadFile = File(...)):
+    """Extract text from a PDF or DOCX file for chat attachment use."""
+    await require_user(request)
+
+    if not file.filename:
+        raise HTTPException(status_code=400, detail="No filename provided")
+
+    suffix = Path(file.filename).suffix.lower()
+    content = await file.read()
+
+    if suffix == ".pdf":
+        import io
+        from pypdf import PdfReader
+        reader = PdfReader(io.BytesIO(content))
+        text = ""
+        for page in reader.pages:
+            page_text = page.extract_text()
+            if page_text:
+                text += page_text + "\n\n"
+        text = text.strip()
+    elif suffix == ".docx":
+        import io
+        from docx import Document as DocxDocument
+        doc = DocxDocument(io.BytesIO(content))
+        text = "\n".join(p.text for p in doc.paragraphs if p.text.strip())
+    else:
+        raise HTTPException(status_code=400, detail="Unsupported file type. Only PDF and DOCX are supported.")
+
+    return {"text": text, "filename": file.filename}

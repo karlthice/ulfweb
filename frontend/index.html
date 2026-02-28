@@ -75,7 +75,7 @@
             <div class="input-area" id="input-area">
                 <span class="tokens-counter" id="tokens-counter"></span>
                 <div class="input-container">
-                    <input type="file" id="pdf-input" accept=".pdf" class="hidden">
+                    <input type="file" id="pdf-input" accept=".pdf,.docx" class="hidden">
                     <input type="file" id="image-input" accept="image/*" class="hidden">
                     <div class="attach-wrapper">
                         <button class="attach-btn" id="attach-btn" title="Attach file">
@@ -83,7 +83,7 @@
                         </button>
                         <div class="attach-menu hidden" id="attach-menu">
                             <button class="attach-menu-item" id="attach-pdf">
-                                <span>&#128196;</span> PDF Document
+                                <span>&#128196;</span> Document
                             </button>
                             <button class="attach-menu-item" id="attach-image">
                                 <span>&#128247;</span> Image
@@ -154,9 +154,9 @@
                     <select id="collection-select">
                         <option value="">Loading...</option>
                     </select>
-                    <button class="upload-btn" id="upload-btn" title="Upload PDF">
+                    <button class="upload-btn" id="upload-btn" title="Upload document">
                         <span class="icon">&#128206;</span>
-                        Upload PDF
+                        Upload
                     </button>
                 </div>
                 <div class="documents-list-container">
@@ -290,18 +290,18 @@
         <div class="modal-overlay" id="upload-modal-overlay"></div>
         <div class="modal-content">
             <div class="modal-header">
-                <h2>Upload PDF</h2>
+                <h2>Upload Document</h2>
                 <button class="close-btn" id="close-upload-modal">&times;</button>
             </div>
             <div class="modal-body">
                 <div class="upload-dropzone" id="upload-dropzone">
                     <div class="dropzone-content">
                         <span class="dropzone-icon">&#128196;</span>
-                        <p>Drag and drop a PDF file here</p>
+                        <p>Drag and drop a PDF or DOCX file here</p>
                         <p class="dropzone-or">or</p>
                         <button class="browse-btn" id="browse-btn">Browse Files</button>
                     </div>
-                    <input type="file" id="upload-file-input" accept=".pdf" class="hidden">
+                    <input type="file" id="upload-file-input" accept=".pdf,.docx" class="hidden">
                 </div>
                 <div class="upload-progress hidden" id="upload-progress">
                     <div class="progress-filename" id="progress-filename"></div>
