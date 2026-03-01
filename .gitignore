@@ -12,6 +12,13 @@ data/
 .vscode/
 .idea/
 
+# Node
+node_modules/
+
+# Playwright
+test-results/
+playwright-report/
+
 # OS
 .DS_Store
 
