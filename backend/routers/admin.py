@@ -169,6 +169,7 @@ async def add_server(data: ServerCreate, request: Request):
         friendly_name=data.friendly_name,
         url=url,
         active=data.active,
+        autoload=data.autoload,
         model_path=data.model_path,
         parallel=data.parallel,
         ctx_size=data.ctx_size

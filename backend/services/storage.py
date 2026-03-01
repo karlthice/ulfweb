@@ -260,13 +260,13 @@ async def list_servers(active_only: bool = False) -> list[Server]:
     async with get_db() as db:
         if active_only:
             cursor = await db.execute(
-                """SELECT id, friendly_name, url, active, model_path, parallel, ctx_size, created_at
+                """SELECT id, friendly_name, url, active, autoload, model_path, parallel, ctx_size, created_at
                    FROM servers WHERE active = 1
                    ORDER BY friendly_name ASC"""
             )
         else:
             cursor = await db.execute(
-                """SELECT id, friendly_name, url, active, model_path, parallel, ctx_size, created_at
+                """SELECT id, friendly_name, url, active, autoload, model_path, parallel, ctx_size, created_at
                    FROM servers
                    ORDER BY friendly_name ASC"""
             )
@@ -278,7 +278,7 @@ async def get_server(server_id: int) -> Server | None:
     """Get a server by ID."""
     async with get_db() as db:
         cursor = await db.execute(
-            """SELECT id, friendly_name, url, active, model_path, parallel, ctx_size, created_at
+            """SELECT id, friendly_name, url, active, autoload, model_path, parallel, ctx_size, created_at
                FROM servers WHERE id = ?""",
             (server_id,)
         )
@@ -290,6 +290,7 @@ async def create_server(
     friendly_name: str,
     url: str,
     active: bool = True,
+    autoload: bool = False,
     model_path: str | None = None,
     parallel: int = 1,
     ctx_size: int = 32768
@@ -299,9 +300,9 @@ async def create_server(
         from datetime import datetime
         now = datetime.utcnow()
         cursor = await db.execute(
-            """INSERT INTO servers (friendly_name, url, active, model_path, parallel, ctx_size, created_at)
-               VALUES (?, ?, ?, ?, ?, ?, ?)""",
-            (friendly_name, url, 1 if active else 0, model_path, parallel, ctx_size, now)
+            """INSERT INTO servers (friendly_name, url, active, autoload, model_path, parallel, ctx_size, created_at)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+            (friendly_name, url, 1 if active else 0, 1 if autoload else 0, model_path, parallel, ctx_size, now)
         )
         await db.commit()
         return Server(
@@ -309,6 +310,7 @@ async def create_server(
             friendly_name=friendly_name,
             url=url,
             active=active,
+            autoload=autoload,
             model_path=model_path,
             parallel=parallel,
             ctx_size=ctx_size,
@@ -321,12 +323,12 @@ async def update_server(server_id: int, updates: dict[str, Any]) -> Server | Non
     async with get_db() as db:
         set_clauses = []
         values = []
-        valid_keys = ("friendly_name", "url", "active", "model_path", "parallel", "ctx_size")
+        valid_keys = ("friendly_name", "url", "active", "autoload", "model_path", "parallel", "ctx_size")
         for key, value in updates.items():
             if key not in valid_keys:
                 continue
             if value is not None:
-                if key == "active":
+                if key in ("active", "autoload"):
                     set_clauses.append(f"{key} = ?")
                     values.append(1 if value else 0)
                 else:

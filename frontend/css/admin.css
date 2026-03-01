@@ -177,6 +177,16 @@
     color: var(--text-muted);
 }
 
+.server-autoload-badge {
+    display: inline-block;
+    font-size: 0.7rem;
+    padding: 0.1rem 0.4rem;
+    margin-top: 0.25rem;
+    background: var(--bg-tertiary, #374151);
+    color: var(--text-muted);
+    border-radius: 4px;
+}
+
 .server-info {
     flex: 1;
     min-width: 0;

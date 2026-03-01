@@ -383,6 +383,11 @@ async def init_database() -> None:
                 "ALTER TABLE servers ADD COLUMN ctx_size INTEGER DEFAULT 32768"
             )
             await db.commit()
+        if "autoload" not in columns:
+            await db.execute(
+                "ALTER TABLE servers ADD COLUMN autoload INTEGER DEFAULT 0"
+            )
+            await db.commit()
 
         # Migration: Add page_number and context_prefix to document_chunks
         cursor = await db.execute("PRAGMA table_info(document_chunks)")

@@ -601,6 +601,7 @@ const admin = {
                     <div class="server-url">${this.escapeHtml(server.url)}</div>
                     ${modelDisplay}
                     <div class="server-process-status ${processStatusClass}">${processStatusText}</div>
+                    ${server.autoload ? '<div class="server-autoload-badge">Autoload</div>' : ''}
                 </div>
                 <div class="server-actions">
                     <div class="process-controls">
@@ -627,6 +628,7 @@ const admin = {
         const parallelInput = document.getElementById('server-parallel');
         const ctxSizeInput = document.getElementById('server-ctx-size');
         const activeInput = document.getElementById('server-active');
+        const autoloadInput = document.getElementById('server-autoload');
 
         // Refresh model dropdown
         this.populateModelDropdown();
@@ -640,6 +642,7 @@ const admin = {
             parallelInput.value = server.parallel || 1;
             ctxSizeInput.value = server.ctx_size || 32768;
             activeInput.checked = server.active;
+            autoloadInput.checked = server.autoload;
         } else {
             title.textContent = 'Add Server';
             idInput.value = '';
@@ -649,6 +652,7 @@ const admin = {
             parallelInput.value = '1';
             ctxSizeInput.value = '32768';
             activeInput.checked = true;
+            autoloadInput.checked = false;
         }
 
         modal.classList.remove('hidden');
@@ -683,6 +687,7 @@ const admin = {
         const parallelInput = document.getElementById('server-parallel');
         const ctxSizeInput = document.getElementById('server-ctx-size');
         const activeInput = document.getElementById('server-active');
+        const autoloadInput = document.getElementById('server-autoload');
 
         const name = nameInput.value.trim();
         const url = urlInput.value.trim();
@@ -690,6 +695,7 @@ const admin = {
         const parallel = parseInt(parallelInput.value, 10);
         const ctxSize = parseInt(ctxSizeInput.value, 10);
         const active = activeInput.checked;
+        const autoload = autoloadInput.checked;
 
         if (!name) {
             alert('Please fill in the server name');
@@ -702,7 +708,8 @@ const admin = {
             model_path: modelPath,
             parallel: parallel,
             ctx_size: ctxSize,
-            active: active
+            active: active,
+            autoload: autoload
         };
 
         try {

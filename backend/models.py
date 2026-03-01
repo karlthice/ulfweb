@@ -106,6 +106,7 @@ class ServerBase(BaseModel):
     friendly_name: str
     url: str
     active: bool = True
+    autoload: bool = False
     model_path: str | None = None
     parallel: int = Field(default=1, ge=1, le=4)
     ctx_size: int = Field(default=32768, ge=512, le=131072)
@@ -124,6 +125,7 @@ class ServerUpdate(BaseModel):
     friendly_name: str | None = None
     url: str | None = None
     active: bool | None = None
+    autoload: bool | None = None
     model_path: str | None = None
     parallel: int | None = Field(default=None, ge=1, le=4)
     ctx_size: int | None = Field(default=None, ge=512, le=131072)
