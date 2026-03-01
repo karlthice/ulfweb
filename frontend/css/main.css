@@ -330,6 +330,25 @@ html, body {
     color: white;
 }
 
+.context-warning-badge {
+    max-width: 768px;
+    margin: 0 auto 0.25rem;
+    padding: 0.25rem 0.75rem;
+    font-size: 0.75rem;
+    color: #92400e;
+    background: #fef3c7;
+    border: 1px solid #f59e0b;
+    border-radius: 6px;
+    text-align: center;
+    cursor: help;
+}
+
+[data-theme="dark"] .context-warning-badge {
+    color: #fbbf24;
+    background: #451a0340;
+    border-color: #b4560080;
+}
+
 .message-content {
     flex: 1;
     min-width: 0;

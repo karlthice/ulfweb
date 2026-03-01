@@ -100,6 +100,7 @@ async def stream_chat_response(
     used_tokens += _estimate_tokens(user_message)
 
     remaining = ctx_budget - used_tokens
+    context_overflow = used_tokens > ctx_budget
 
     # Walk history newest-first (excluding current user message), add what fits
     history = messages[:-1]  # Exclude last message (it's the current user message)
@@ -145,6 +146,9 @@ async def stream_chat_response(
 
     # Tell the frontend which server is handling this request
     yield f"data: {json.dumps({'type': 'server_info', 'server_name': server_name})}\n\n"
+
+    if context_overflow:
+        yield f"data: {json.dumps({'type': 'context_warning', 'used': used_tokens, 'budget': ctx_budget})}\n\n"
 
     try:
         async with httpx.AsyncClient(timeout=None) as client:

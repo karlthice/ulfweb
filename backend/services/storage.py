@@ -1079,9 +1079,6 @@ async def get_vault_case_context(case_id: int, user_id: int, max_recent: int = 1
             for r in starred:
                 r = dict(r)
                 text = r["content"] or r["ai_description"] or ""
-                if text:
-                    # Truncate long records
-                    text = text[:500] + "..." if len(text) > 500 else text
                 parts.append(f'- {r["record_date"]} "{r["title"]}": {text}')
 
         # Get recent unstarred records
@@ -1110,8 +1107,6 @@ async def get_vault_case_context(case_id: int, user_id: int, max_recent: int = 1
             for r in recent:
                 r = dict(r)
                 text = r["content"] or r["ai_description"] or ""
-                if text:
-                    text = text[:500] + "..." if len(text) > 500 else text
                 label = "[AI Summary] " if r["record_type"] != "text" and r["ai_description"] else ""
                 parts.append(f'- {r["record_date"]} "{r["title"]}": {label}{text}')
 

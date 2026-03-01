@@ -16,7 +16,7 @@ class SSEHandler {
      * @param {function} onError - Callback for errors
      * @param {string|null} imageBase64 - Optional base64-encoded image
      */
-    async streamMessage(conversationId, content, onChunk, onDone, onError, imageBase64 = null, caseRefs = null, onServerInfo = null) {
+    async streamMessage(conversationId, content, onChunk, onDone, onError, imageBase64 = null, caseRefs = null, onServerInfo = null, onContextWarning = null) {
         // Abort any existing stream
         this.abort();
 
@@ -73,6 +73,8 @@ class SSEHandler {
                                 onError(parsed.content);
                             } else if (parsed.type === 'server_info' && onServerInfo) {
                                 onServerInfo(parsed.server_name);
+                            } else if (parsed.type === 'context_warning' && onContextWarning) {
+                                onContextWarning(parsed.used, parsed.budget);
                             }
                         } catch (e) {
                             // Skip invalid JSON

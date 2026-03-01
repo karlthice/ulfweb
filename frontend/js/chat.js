@@ -698,6 +698,14 @@ const chat = {
             // onServerInfo
             (serverName) => {
                 tokensCounter.title = serverName;
+            },
+            // onContextWarning
+            (used, budget) => {
+                const badge = document.createElement('div');
+                badge.className = 'context-warning-badge';
+                badge.textContent = `Context exceeded (~${used} / ${budget} tokens)`;
+                badge.title = `The prompt uses approximately ${used} tokens but the server context window is ${budget} tokens. Some content may be lost and results may be degraded.`;
+                assistantDiv.insertBefore(badge, assistantDiv.firstChild);
             }
         );
     },
