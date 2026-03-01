@@ -735,7 +735,10 @@ def generate_admin_manual():
                     "from 8K to 128K. Larger contexts require more memory. "
                     "Default: 32768")
     pdf.bold_bullet("Active", "Whether this server is available for use")
-    pdf.bold_bullet("Autoload", "Automatically start this server when ULF Web starts")
+    pdf.bold_bullet("Autoload on Startup", "When enabled, this server will "
+                    "automatically start when ULF Web launches. Useful for "
+                    "ensuring key services are always available without manual "
+                    "intervention after a reboot or restart.")
 
     pdf.section_title("Starting and Stopping Servers")
     pdf.body_text("Each server has three control buttons:")
@@ -747,6 +750,26 @@ def generate_admin_manual():
     pdf.body_text(
         "A status indicator shows whether the server is running (green), "
         "stopped (gray), or in an error state (red)."
+    )
+
+    pdf.section_title("Autoload on Startup")
+    pdf.body_text(
+        "Servers with the Autoload option enabled are automatically started "
+        "when ULF Web launches. This is useful for production deployments "
+        "where you want key models to be immediately available after a "
+        "system reboot or application restart."
+    )
+    pdf.body_text(
+        "During startup, ULF Web iterates through all active servers that "
+        "have autoload enabled and a model path configured, and starts them "
+        "in sequence. If a server fails to autoload (e.g., insufficient "
+        "memory), the error is logged and the remaining servers continue "
+        "to start normally."
+    )
+    pdf.note_box(
+        "Ensure your system has enough RAM and VRAM to load all autoload "
+        "servers simultaneously. Check System Info after startup to verify "
+        "all expected servers are running."
     )
 
     pdf.section_title("Server Logs")
