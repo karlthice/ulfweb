@@ -405,9 +405,28 @@ const chat = {
      * Configure marked for markdown rendering
      */
     setupMarked() {
+        const renderer = new marked.Renderer();
+        const defaultCode = renderer.code.bind(renderer);
+
+        renderer.code = function({ text, lang, escaped }) {
+            if (lang === 'chart') {
+                const id = chartRenderer.nextId();
+                // Escape the JSON for safe embedding in an HTML attribute
+                const safe = text
+                    .replace(/&/g, '&amp;')
+                    .replace(/'/g, '&#39;')
+                    .replace(/"/g, '&quot;')
+                    .replace(/</g, '&lt;')
+                    .replace(/>/g, '&gt;');
+                return `<div class="chart-container" id="${id}" data-chart="${safe}"></div>`;
+            }
+            return defaultCode({ text, lang, escaped });
+        };
+
         marked.setOptions({
             breaks: true,
-            gfm: true
+            gfm: true,
+            renderer: renderer
         });
     },
 
@@ -540,6 +559,7 @@ const chat = {
         contentDiv.className = 'message-content';
         if (role === 'assistant' && content) {
             contentDiv.innerHTML = this.renderMarkdown(content);
+            chartRenderer.renderCharts(contentDiv);
         } else {
             contentDiv.textContent = content;
         }
@@ -641,6 +661,7 @@ const chat = {
                     requestAnimationFrame(() => {
                         renderPending = false;
                         contentDiv.innerHTML = this.renderMarkdown(assistantContent);
+                        chartRenderer.renderCharts(contentDiv);
                         this.scrollToBottom();
                     });
                 }
@@ -660,6 +681,7 @@ const chat = {
                 if (assistantContent) {
                     // Render final markdown
                     contentDiv.innerHTML = this.renderMarkdown(assistantContent);
+                    chartRenderer.renderCharts(contentDiv);
                     this.messages.push({ role: 'assistant', content: assistantContent });
 
                     // Add speak button after streaming completes
