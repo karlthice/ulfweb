@@ -163,9 +163,34 @@ async def stream_chat_response(
                     yield f"data: {json.dumps({'type': 'error', 'content': f'LLM server error: {error_text.decode()}'})}\n\n"
                     return
 
-                # Buffer to strip <think>...</think> blocks from reasoning models
+                # Buffer to strip <think>...</think> and <thinking>...</thinking>
+                # blocks from reasoning models.
+                # Longest tag is </thinking> (11 chars); keep 12 in the tail
+                # buffer so partial tags are never flushed prematurely.
+                TAIL_SIZE = 12
                 token_buffer = ""
                 in_think = False
+
+                def _find_open(text):
+                    """Return (pos, tag_len) of first think-open tag, or None."""
+                    best = None
+                    for tag in ("<thinking>", "<think>"):
+                        p = text.find(tag)
+                        if p != -1 and (best is None or p < best[0]):
+                            best = (p, len(tag))
+                    return best
+
+                def _find_close(text):
+                    """Return (pos, tag_len) of first think-close tag, or None."""
+                    best = None
+                    for tag in ("</thinking>", "</think>"):
+                        p = text.find(tag)
+                        if p != -1 and (best is None or p < best[0]):
+                            best = (p, len(tag))
+                    return best
+
+                def _strip_close_tags(text):
+                    return text.replace("</thinking>", "").replace("</think>", "")
 
                 async for line in response.aiter_lines():
                     if not line:
@@ -185,37 +210,49 @@ async def stream_chat_response(
                                 if content:
                                     token_buffer += content
 
-                                    # Strip <think>...</think> blocks
-                                    while "<think>" in token_buffer:
-                                        before = token_buffer[:token_buffer.find("<think>")]
-                                        after = token_buffer[token_buffer.find("<think>") + 7:]
-                                        if "</think>" in after:
-                                            token_buffer = before + after[after.find("</think>") + 8:]
-                                        else:
-                                            if before:
-                                                assistant_content += before
-                                                yield f"data: {json.dumps({'type': 'content', 'content': before})}\n\n"
-                                            token_buffer = after
-                                            in_think = True
-                                            break
+                                    # Strip think blocks
+                                    if not in_think:
+                                        match = _find_open(token_buffer)
+                                        while match:
+                                            pos, tag_len = match
+                                            before = token_buffer[:pos]
+                                            after = token_buffer[pos + tag_len:]
+                                            close = _find_close(after)
+                                            if close:
+                                                # Full think block in buffer — remove it
+                                                c_pos, c_len = close
+                                                token_buffer = before + after[c_pos + c_len:]
+                                                match = _find_open(token_buffer)
+                                            else:
+                                                # Open tag without close — enter think mode
+                                                if before:
+                                                    assistant_content += before
+                                                    yield f"data: {json.dumps({'type': 'content', 'content': before})}\n\n"
+                                                token_buffer = after
+                                                in_think = True
+                                                break
 
                                     if in_think:
-                                        if "</think>" in token_buffer:
-                                            token_buffer = token_buffer[token_buffer.find("</think>") + 8:]
+                                        close = _find_close(token_buffer)
+                                        if close:
+                                            c_pos, c_len = close
+                                            token_buffer = token_buffer[c_pos + c_len:]
                                             in_think = False
                                         else:
-                                            token_buffer = token_buffer[-8:] if len(token_buffer) > 8 else token_buffer
+                                            # Keep tail for split close-tag detection
+                                            if len(token_buffer) > TAIL_SIZE:
+                                                token_buffer = token_buffer[-TAIL_SIZE:]
                                             continue
 
-                                    token_buffer = token_buffer.replace("</think>", "")
+                                    token_buffer = _strip_close_tags(token_buffer)
 
                                     if in_think:
                                         continue
 
-                                    # Flush buffer, keeping tail for partial tag detection
-                                    if len(token_buffer) > 10:
-                                        to_send = token_buffer[:-5]
-                                        token_buffer = token_buffer[-5:]
+                                    # Flush buffer, keeping tail for partial open-tag detection
+                                    if len(token_buffer) > TAIL_SIZE * 2:
+                                        to_send = token_buffer[:-TAIL_SIZE]
+                                        token_buffer = token_buffer[-TAIL_SIZE:]
                                         if to_send:
                                             assistant_content += to_send
                                             yield f"data: {json.dumps({'type': 'content', 'content': to_send})}\n\n"
@@ -224,8 +261,10 @@ async def stream_chat_response(
 
                 # Flush remaining buffer
                 if token_buffer and not in_think:
-                    assistant_content += token_buffer
-                    yield f"data: {json.dumps({'type': 'content', 'content': token_buffer})}\n\n"
+                    token_buffer = _strip_close_tags(token_buffer)
+                    if token_buffer:
+                        assistant_content += token_buffer
+                        yield f"data: {json.dumps({'type': 'content', 'content': token_buffer})}\n\n"
 
         # Save assistant message
         if assistant_content:
