@@ -645,8 +645,8 @@ const chat = {
                     });
                 }
 
-                // Update tokens/sec counter (approximate tokens by splitting on whitespace/punctuation)
-                tokenCount++;
+                // Update tokens/sec counter (estimate ~4 chars per token)
+                tokenCount += Math.max(1, Math.round(chunk.length / 4));
                 const elapsed = (performance.now() - startTime) / 1000;
                 if (elapsed > 0) {
                     const tokensPerSec = (tokenCount / elapsed).toFixed(1);

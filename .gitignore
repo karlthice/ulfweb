@@ -8,6 +8,9 @@ venv/
 # Data directory
 data/
 
+# Models
+models/
+
 # IDE
 .vscode/
 .idea/
