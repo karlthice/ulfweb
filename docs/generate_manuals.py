@@ -65,7 +65,7 @@ class ManualPDF(FPDF):
         self.set_font(FONT_NAME, "", 12)
         self.set_text_color(100, 100, 100)
         self.cell(0, 8, "Version 1.0", align="C", new_x="LMARGIN", new_y="NEXT")
-        self.cell(0, 8, "February 2026", align="C", new_x="LMARGIN", new_y="NEXT")
+        self.cell(0, 8, "March 2026", align="C", new_x="LMARGIN", new_y="NEXT")
 
     def chapter_title(self, number: int, title: str):
         self.add_page()
