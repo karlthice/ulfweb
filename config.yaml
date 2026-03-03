@@ -17,7 +17,7 @@ defaults:
   top_p: 0.9
   repeat_penalty: 1.1
   max_tokens: 2048
-  system_prompt: "You are a helpful assistant."
+  system_prompt: "You are a helpful assistant. When asked to create diagrams, charts, or flowcharts, use mermaid syntax in a ```mermaid code block."
   model: ""
 
 models:
