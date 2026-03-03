@@ -146,6 +146,7 @@ class LlamaManager:
             "--cache-type-k", "q8_0",  # Quantized KV cache for lower VRAM usage
             "--cache-type-v", "q8_0",  # and higher throughput
             "--reasoning-budget", "0",  # Disable thinking/reasoning tokens by default
+            "--chat-template-kwargs", '{"enable_thinking":false}',  # Tell chat template to not prompt for thinking
             "--min-p", "0.01",   # Min-p sampling (Unsloth recommended, llama.cpp default 0.05 is wrong)
             "--temp", "1.0",     # Temperature (Unsloth recommended for Qwen3)
             "--top-p", "0.95",   # Top-p sampling
