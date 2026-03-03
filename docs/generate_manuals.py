@@ -12,6 +12,7 @@ LOGO_PATH = os.path.join(
     os.path.dirname(__file__), "..", "frontend", "images", "ULF-icon-1-black.png"
 )
 OUTPUT_DIR = os.path.dirname(__file__)
+SCREENSHOT_DIR = os.path.join(os.path.dirname(__file__), "screenshots")
 
 FONT_DIR = "/usr/share/fonts/truetype/dejavu"
 FONT_NAME = "DejaVu"
@@ -143,6 +144,40 @@ class ManualPDF(FPDF):
         for num, title in entries:
             self.cell(0, 8, f"  {num}.  {title}", new_x="LMARGIN", new_y="NEXT")
         self.ln(5)
+
+
+def _embed_screenshot(pdf: ManualPDF, filename: str, caption: str):
+    """Embed a screenshot image with caption, or a placeholder if missing."""
+    img_path = os.path.join(SCREENSHOT_DIR, filename)
+    if os.path.exists(img_path):
+        # Page-break check: need ~120mm for image + caption
+        if pdf.get_y() > 160:
+            pdf.add_page()
+        pdf.ln(3)
+        pdf.image(img_path, x=20, w=170)
+        pdf.ln(2)
+    else:
+        if pdf.get_y() > 200:
+            pdf.add_page()
+        pdf.ln(3)
+        pdf.set_fill_color(230, 230, 230)
+        pdf.set_draw_color(180, 180, 180)
+        pdf.rect(20, pdf.get_y(), 170, 30, style="DF")
+        pdf.set_font(FONT_NAME, "I", 9)
+        pdf.set_text_color(120, 120, 120)
+        y_center = pdf.get_y() + 12
+        pdf.set_xy(20, y_center)
+        pdf.cell(170, 6, f"[Screenshot: {filename}]", align="C")
+        pdf.set_y(pdf.get_y() + 22)
+        pdf.ln(2)
+    # Caption
+    pdf.set_font(FONT_NAME, "I", 9)
+    pdf.set_text_color(100, 100, 100)
+    pdf.set_x(20)
+    pdf.cell(170, 5, caption, align="C", new_x="LMARGIN", new_y="NEXT")
+    pdf.ln(4)
+    # Reset text color
+    pdf.set_text_color(40, 40, 40)
 
 
 # ---------------------------------------------------------------------------
@@ -1183,7 +1218,256 @@ def generate_admin_manual():
     print(f"Admin Manual saved to: {output_path}")
 
 
+# ---------------------------------------------------------------------------
+# Vault Tutorial
+# ---------------------------------------------------------------------------
+def generate_vault_tutorial():
+    pdf = ManualPDF("ULF Web Vault Tutorial", "Vault Tutorial")
+    pdf.cover_page()
+
+    toc = [
+        (1, "Introduction"),
+        (2, "Navigating to the Vault"),
+        (3, "Creating a Case"),
+        (4, "The Case Detail View"),
+        (5, "Adding Records"),
+        (6, "Working with Records"),
+        (7, "Exporting Cases"),
+        (8, "Using Vault Cases in Chat"),
+    ]
+    pdf.toc_page(toc)
+
+    # Chapter 1: Introduction
+    pdf.chapter_title(1, "Introduction")
+    pdf.body_text(
+        "The Vault is ULF Web\u2019s built-in case management system. It lets you "
+        "organize information into cases, each containing text notes, documents, "
+        "and images. The AI automatically generates descriptions and summaries "
+        "to help you work with your data."
+    )
+    pdf.body_text(
+        "In this tutorial you will learn how to:"
+    )
+    pdf.bullet("Navigate to the Vault and search for cases")
+    pdf.bullet("Create a new case with an identifier and description")
+    pdf.bullet("View and manage case details")
+    pdf.bullet("Add text, document, and image records to a case")
+    pdf.bullet("Star important records and manage record lifecycle")
+    pdf.bullet("Export cases as PDF or JSON")
+    pdf.bullet("Reference vault cases in chat conversations using @mentions")
+    pdf.note_box(
+        "This tutorial assumes you are already logged in to ULF Web. "
+        "If you need help logging in, see the User Manual."
+    )
+
+    # Chapter 2: Navigating to the Vault
+    pdf.chapter_title(2, "Navigating to the Vault")
+    pdf.body_text(
+        "The Vault is one of the five main tools in ULF Web, accessible from "
+        "the sidebar navigation tabs. Click the Vault tab to switch to the "
+        "Vault panel."
+    )
+    _embed_screenshot(pdf, "01-vault-tab.png",
+                      "Figure 1 \u2014 The Vault panel after clicking the Vault tab")
+    pdf.body_text(
+        "The Vault panel displays your list of cases. At the top you will find "
+        "a search bar that filters cases in real time as you type. Below it is "
+        "the New Case button for creating new cases."
+    )
+    pdf.body_text(
+        "Cases you own (created by you) and public cases created by other "
+        "users are both shown in the list. Private cases are only visible "
+        "to their owner."
+    )
+
+    # Chapter 3: Creating a Case
+    pdf.chapter_title(3, "Creating a Case")
+    pdf.body_text(
+        "To create a new case, click the New Case button. A form will appear "
+        "with the following fields:"
+    )
+    pdf.bold_bullet("Identifier", "A short, unique code for the case (e.g., "
+                    "CASE-001, INV-2026-042). This is used as a reference label.")
+    pdf.bold_bullet("Name", "A descriptive name for the case (e.g., "
+                    "\u201cSmith Investigation\u201d).")
+    pdf.bold_bullet("Description", "Optional free-text description providing "
+                    "background or context for the case.")
+    pdf.bold_bullet("Visibility", "Choose Public (visible to all users) or "
+                    "Private (visible only to you).")
+
+    _embed_screenshot(pdf, "02-new-case-form.png",
+                      "Figure 2 \u2014 The new case form with fields filled in")
+
+    pdf.body_text(
+        "Click Create to submit the form. The new case appears immediately "
+        "in the case list."
+    )
+    _embed_screenshot(pdf, "03-case-list.png",
+                      "Figure 3 \u2014 The case list showing the newly created case")
+
+    # Chapter 4: The Case Detail View
+    pdf.chapter_title(4, "The Case Detail View")
+    pdf.body_text(
+        "Click on a case in the list to open its detail view. The detail "
+        "view shows:"
+    )
+    pdf.bullet("The case identifier, name, and status at the top")
+    pdf.bullet("An AI-generated summary (updated automatically as records are added)")
+    pdf.bullet("Action buttons for adding records, exporting, and managing the case")
+    pdf.bullet("A chronological list of all records in the case")
+
+    _embed_screenshot(pdf, "04-case-detail.png",
+                      "Figure 4 \u2014 The case detail view")
+
+    pdf.body_text(
+        "The case status can be Active, Closed, or Archived. Active cases "
+        "are open for editing. Closed cases are preserved for reference. "
+        "Archived cases are stored long-term."
+    )
+
+    # Chapter 5: Adding Records
+    pdf.chapter_title(5, "Adding Records")
+    pdf.body_text(
+        "Records are the individual pieces of information stored in a case. "
+        "ULF Web supports three types of records:"
+    )
+    pdf.bold_bullet("Text", "Free-form text notes with a title, date, and content. "
+                    "Ideal for interview notes, observations, or summaries.")
+    pdf.bold_bullet("Document", "PDF files uploaded to the case. The AI automatically "
+                    "generates a summary of the document content.")
+    pdf.bold_bullet("Image", "Image files (JPEG, PNG). If a vision-capable model is "
+                    "configured, the AI automatically generates a description.")
+
+    pdf.section_title("Adding a Text Record")
+    pdf.body_text(
+        "Click the Add Record button to open the record form. Select the "
+        "record type (Text is the default), then fill in the title and content."
+    )
+    _embed_screenshot(pdf, "05-add-text-record.png",
+                      "Figure 5 \u2014 The add record form with a text record")
+
+    pdf.body_text(
+        "Click Submit to save the record. It appears in the record list "
+        "below the case details. You can add as many records as needed."
+    )
+    _embed_screenshot(pdf, "06-records-populated.png",
+                      "Figure 6 \u2014 The case with two text records")
+
+    pdf.section_title("Uploading Documents and Images")
+    pdf.body_text(
+        "To upload a document or image, change the record type dropdown to "
+        "Document or Image. A file upload area appears where you can click "
+        "to browse or drag-and-drop a file. The AI will process the file "
+        "in the background after upload."
+    )
+
+    # Chapter 6: Working with Records
+    pdf.chapter_title(6, "Working with Records")
+
+    pdf.section_title("Starring Records")
+    pdf.body_text(
+        "Click the star icon on any record to mark it as important. Starred "
+        "records are visually highlighted, making them easy to spot in long "
+        "case files. Click the star again to remove the highlight."
+    )
+    _embed_screenshot(pdf, "07-starred-record.png",
+                      "Figure 7 \u2014 A starred record highlighted in the list")
+
+    pdf.section_title("Editing Records")
+    pdf.body_text(
+        "Text records can be edited within 24 hours of creation. Click the "
+        "edit button on a record to modify its title or content. After 24 "
+        "hours, records are locked to preserve the integrity of the case "
+        "history."
+    )
+
+    pdf.section_title("Deleting Records")
+    pdf.body_text(
+        "Click the delete button on a record to permanently remove it from "
+        "the case. You will be asked to confirm before the record is deleted. "
+        "The AI case summary is automatically updated after deletion."
+    )
+
+    # Chapter 7: Exporting Cases
+    pdf.chapter_title(7, "Exporting Cases")
+    pdf.body_text(
+        "ULF Web provides two export formats for sharing or archiving cases. "
+        "Click the Export button in the case detail view to see the options."
+    )
+    _embed_screenshot(pdf, "08-export-menu.png",
+                      "Figure 8 \u2014 The export dropdown menu")
+
+    pdf.section_title("PDF Export")
+    pdf.body_text(
+        "Generates a formatted PDF document containing the full case: "
+        "metadata, description, AI summary, and all records with any "
+        "embedded images and documents. Ideal for sharing with colleagues "
+        "or printing."
+    )
+
+    pdf.section_title("JSON Export")
+    pdf.body_text(
+        "Exports the case data as a structured JSON file containing all "
+        "text content, metadata, timestamps, and record details. Useful "
+        "for backups, data migration, or programmatic analysis."
+    )
+
+    # Chapter 8: Using Vault Cases in Chat
+    pdf.chapter_title(8, "Using Vault Cases in Chat")
+    pdf.body_text(
+        "One of the most powerful features of the Vault is the ability to "
+        "reference cases directly in chat conversations. This injects the "
+        "case\u2019s recent records as context, allowing the AI to answer "
+        "questions about your case data."
+    )
+
+    pdf.section_title("The @Mention Syntax")
+    pdf.body_text(
+        "In the chat input, type the @ symbol followed by part of the case "
+        "name or identifier. An autocomplete dropdown appears showing "
+        "matching cases."
+    )
+    _embed_screenshot(pdf, "09-chat-at-mention.png",
+                      "Figure 9 \u2014 The @mention autocomplete dropdown")
+
+    pdf.body_text(
+        "Click on a case in the dropdown (or use the arrow keys and Enter) "
+        "to insert the @mention into your message."
+    )
+    _embed_screenshot(pdf, "10-chat-with-mention.png",
+                      "Figure 10 \u2014 A completed @mention in the chat input")
+
+    pdf.section_title("How Context Injection Works")
+    pdf.body_text(
+        "When you send a message containing one or more @mentions, ULF Web "
+        "retrieves the recent records from each referenced case and includes "
+        "them as context in the conversation. The AI can then reason about "
+        "the case data alongside your question."
+    )
+    pdf.body_text(
+        "The number of records included is controlled by the administrator "
+        "in the Vault settings (default: 10 most recent records). Starred "
+        "records are always prioritized."
+    )
+
+    pdf.section_title("Example Use Cases")
+    pdf.bullet("\"@Smith Investigation \u2014 Summarize the key findings so far\"")
+    pdf.bullet("\"Based on @CASE-001, are there any contradictions in the witness statements?\"")
+    pdf.bullet("\"Compare the timelines in @CASE-001 and @CASE-002\"")
+
+    pdf.note_box(
+        "You can reference multiple cases in a single message. Each case\u2019s "
+        "records are injected separately, allowing the AI to cross-reference "
+        "information across cases."
+    )
+
+    output_path = os.path.join(OUTPUT_DIR, "UlfWeb_Vault_Tutorial.pdf")
+    pdf.output(output_path)
+    print(f"Vault Tutorial saved to: {output_path}")
+
+
 if __name__ == "__main__":
     generate_user_manual()
     generate_admin_manual()
-    print("Done! Both manuals generated.")
+    generate_vault_tutorial()
+    print("Done! All manuals generated.")

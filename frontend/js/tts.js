@@ -153,6 +153,8 @@ const tts = (function() {
     function htmlToText(html) {
         const temp = document.createElement('div');
         temp.innerHTML = html;
+        // Remove mermaid diagrams so TTS doesn't read SVG text
+        temp.querySelectorAll('.mermaid-container').forEach(el => el.remove());
         return temp.textContent || temp.innerText || '';
     }
 

@@ -369,6 +369,10 @@
     <script>
         pdfjsLib.GlobalWorkerOptions.workerSrc = '/js/vendor/pdf.worker.min.js';
     </script>
+    <script src="/js/vendor/mermaid.min.js"></script>
+    <script>
+        mermaid.initialize({ startOnLoad: false, theme: 'default', securityLevel: 'strict' });
+    </script>
     <script src="/js/api.js"></script>
     <script src="/js/sse.js"></script>
     <script src="/js/tts.js"></script>

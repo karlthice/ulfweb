@@ -405,9 +405,34 @@ const chat = {
      * Configure marked for markdown rendering
      */
     setupMarked() {
+        const renderer = new marked.Renderer();
+        const defaultCode = renderer.code.bind(renderer);
+
+        renderer.code = function(code, language, escaped) {
+            // Handle both marked v4 (separate args) and v12+ (single object arg)
+            let text, lang;
+            if (typeof code === 'object' && code !== null) {
+                text = code.text;
+                lang = code.lang;
+            } else {
+                text = code;
+                lang = language;
+            }
+
+            if (lang === 'mermaid') {
+                const escapedText = text
+                    .replace(/&/g, '&amp;')
+                    .replace(/</g, '&lt;')
+                    .replace(/>/g, '&gt;');
+                return `<div class="mermaid-container"><div class="mermaid-diagram" data-processed="false"><pre><code class="language-mermaid">${escapedText}</code></pre></div></div>`;
+            }
+            return defaultCode(code, language, escaped);
+        };
+
         marked.setOptions({
             breaks: true,
-            gfm: true
+            gfm: true,
+            renderer: renderer
         });
     },
 
@@ -416,6 +441,29 @@ const chat = {
      */
     renderMarkdown(text) {
         return marked.parse(text);
+    },
+
+    /**
+     * Render mermaid diagrams in a container
+     */
+    async renderMermaidDiagrams(container) {
+        const diagrams = container.querySelectorAll('.mermaid-diagram[data-processed="false"]');
+        for (const el of diagrams) {
+            const source = el.querySelector('code')?.textContent || '';
+            if (!source.trim()) continue;
+
+            try {
+                const id = 'mermaid-' + Math.random().toString(36).substring(2, 10);
+                const { svg } = await mermaid.render(id, source);
+                el.innerHTML = svg;
+                el.classList.add('mermaid-rendered');
+                el.setAttribute('data-processed', 'true');
+            } catch (err) {
+                console.error('Mermaid render error:', err);
+                el.classList.add('mermaid-error');
+                el.setAttribute('data-processed', 'true');
+            }
+        }
     },
 
     /**
@@ -511,6 +559,7 @@ const chat = {
             this.appendMessage(msg.role, msg.content, false);
         }
 
+        this.renderMermaidDiagrams(container);
         this.scrollToBottom();
     },
 
@@ -660,6 +709,7 @@ const chat = {
                 if (assistantContent) {
                     // Render final markdown
                     contentDiv.innerHTML = this.renderMarkdown(assistantContent);
+                    this.renderMermaidDiagrams(contentDiv);
                     this.messages.push({ role: 'assistant', content: assistantContent });
 
                     // Add speak button after streaming completes

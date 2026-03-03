@@ -423,6 +423,37 @@ html, body {
     line-height: 1.6;
 }
 
+/* Mermaid diagram styles */
+.mermaid-container {
+    margin: 1em 0;
+    overflow-x: auto;
+}
+
+.mermaid-diagram {
+    text-align: center;
+    background: #ffffff;
+    border-radius: 8px;
+    padding: 1rem;
+    border: 1px solid var(--border);
+}
+
+.mermaid-rendered svg {
+    max-width: 100%;
+    height: auto;
+}
+
+.mermaid-error {
+    border: 2px dashed var(--error);
+}
+
+.mermaid-error::after {
+    content: 'Diagram rendering failed';
+    display: block;
+    margin-top: 0.5em;
+    color: var(--error);
+    font-size: 0.85em;
+}
+
 .message-content ul,
 .message-content ol {
     margin: 1em 0;
