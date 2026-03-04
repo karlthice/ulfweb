@@ -550,6 +550,19 @@ async def init_database() -> None:
             )
             await db.commit()
 
+        # Migration: Append mermaid instruction to existing system prompts
+        mermaid_hint = "When asked to create diagrams, charts, or flowcharts, use mermaid syntax in a ```mermaid code block."
+        await db.execute(
+            """UPDATE user_settings
+               SET system_prompt = CASE
+                   WHEN system_prompt IS NULL OR system_prompt = '' THEN ?
+                   ELSE system_prompt || ' ' || ?
+               END
+               WHERE system_prompt NOT LIKE '%mermaid%'""",
+            (mermaid_hint, mermaid_hint)
+        )
+        await db.commit()
+
         # Create default admin user if no users exist
         cursor = await db.execute("SELECT COUNT(*) FROM users")
         user_count = (await cursor.fetchone())[0]
