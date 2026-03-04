@@ -292,7 +292,78 @@ for dir in data data/logs data/voices models; do
     fi
 done
 
-# ── 7. Final Summary ───────────────────────────────────────────────────────
+# ── 7. Caddy Reverse Proxy & HTTPS ──────────────────────────────────────────
+header "Caddy Reverse Proxy & HTTPS"
+
+# Install Caddy
+if command -v caddy &>/dev/null; then
+    ok "Caddy already installed: $(caddy version 2>/dev/null | head -1)"
+else
+    info "Installing Caddy..."
+    if [ "$PKG_MGR" = "apt" ]; then
+        sudo apt-get install -y -qq debian-keyring debian-archive-keyring apt-transport-https curl
+        curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/gpg.key' | sudo gpg --dearmor -o /usr/share/keyrings/caddy-stable-archive-keyring.gpg 2>/dev/null
+        curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/debian.deb.txt' | sudo tee /etc/apt/sources.list.d/caddy-stable.list >/dev/null
+        sudo apt-get update -qq
+        sudo apt-get install -y -qq caddy
+    elif [ "$PKG_MGR" = "brew" ]; then
+        brew install caddy
+    fi
+
+    if command -v caddy &>/dev/null; then
+        ok "Caddy installed: $(caddy version 2>/dev/null | head -1)"
+    else
+        warn "Could not install Caddy. HTTPS reverse proxy will not be available."
+        warn "You can still use ULF Web over HTTP on port 8000."
+    fi
+fi
+
+# Allow Caddy to bind to port 443 without root (Linux only)
+if [ "$OS" = "linux" ] && command -v caddy &>/dev/null; then
+    CADDY_BIN="$(which caddy)"
+    if ! getcap "$CADDY_BIN" 2>/dev/null | grep -q cap_net_bind_service; then
+        info "Granting Caddy permission to bind to port 443..."
+        sudo setcap cap_net_bind_service=+ep "$CADDY_BIN"
+        ok "Caddy can now bind to port 443 without root"
+    else
+        ok "Caddy already has port 443 bind capability"
+    fi
+fi
+
+# Generate self-signed TLS certificate for LAN access
+CERT_FILE="data/caddy-cert.pem"
+KEY_FILE="data/caddy-key.pem"
+
+if [ -f "$CERT_FILE" ] && [ -f "$KEY_FILE" ]; then
+    ok "TLS certificate already exists"
+else
+    info "Generating self-signed TLS certificate for LAN access..."
+
+    # Detect LAN IP address
+    LAN_IP=""
+    if command -v ip &>/dev/null; then
+        LAN_IP=$(ip route get 1.1.1.1 2>/dev/null | grep -oP 'src \K[0-9.]+' || true)
+    fi
+    if [ -z "$LAN_IP" ] && command -v ifconfig &>/dev/null; then
+        LAN_IP=$(ifconfig 2>/dev/null | grep 'inet ' | grep -v '127.0.0.1' | head -1 | awk '{print $2}')
+    fi
+
+    # Build SAN list
+    SAN="DNS:localhost,IP:127.0.0.1"
+    if [ -n "$LAN_IP" ]; then
+        SAN="$SAN,IP:$LAN_IP"
+        info "Detected LAN IP: $LAN_IP"
+    fi
+
+    openssl req -x509 -newkey rsa:2048 -nodes \
+        -keyout "$KEY_FILE" -out "$CERT_FILE" \
+        -days 3650 -subj "/CN=ULF Web" \
+        -addext "subjectAltName=$SAN" 2>/dev/null
+    chmod 600 "$KEY_FILE"
+    ok "Self-signed TLS certificate generated (valid for 10 years)"
+fi
+
+# ── 8. Final Summary ───────────────────────────────────────────────────────
 header "Installation Complete"
 
 echo ""
@@ -313,6 +384,9 @@ else
     echo "    GPU:          None (CPU only)"
 fi
 echo "    llama-server: $LLAMA_SERVER_ABS"
+if command -v caddy &>/dev/null; then
+    echo "    Caddy:        $(caddy version 2>/dev/null | head -1)"
+fi
 echo ""
 echo "  Next steps:"
 echo ""
@@ -324,6 +398,18 @@ echo "    2. Start ULF Web:"
 echo "         source .venv/bin/activate"
 echo "         python3 -m backend.main"
 echo ""
-echo "    3. Open http://localhost:8000 in your browser."
+if command -v caddy &>/dev/null; then
+    echo "    3. Start Caddy for HTTPS (in a separate terminal):"
+    echo "         caddy run --config Caddyfile"
+    echo ""
+    echo "    4. Open https://localhost in your browser."
+    if [ -n "${LAN_IP:-}" ]; then
+        echo "       LAN access: https://$LAN_IP"
+    fi
+    echo "       (Accept the self-signed certificate warning on first visit)"
+    echo "       HTTPS is required for microphone access (dictation) over LAN."
+else
+    echo "    3. Open http://localhost:8000 in your browser."
+fi
 echo "       Default login: admin / admin"
 echo ""

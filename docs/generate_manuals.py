@@ -706,6 +706,7 @@ def generate_admin_manual():
     pdf.bullet("Clones and builds llama.cpp in a sibling directory (../llama.cpp)")
     pdf.bullet("Generates config.yaml with auto-detected paths (if not already present)")
     pdf.bullet("Creates required data directories (data/, models/, etc.)")
+    pdf.bullet("Installs Caddy web server and generates a self-signed TLS certificate for HTTPS")
 
     pdf.note_box(
         "The script is idempotent and safe to run multiple times. It will "
@@ -723,14 +724,39 @@ def generate_admin_manual():
     pdf.bold_bullet("Apple Silicon (macOS)", "Builds with Metal support for GPU acceleration.")
     pdf.bold_bullet("No GPU", "Falls back to a CPU-only build.")
 
+    pdf.subsection_title("HTTPS & Caddy Reverse Proxy")
+    pdf.body_text(
+        "The install script sets up Caddy as a reverse proxy with HTTPS. This "
+        "is required for browser features like microphone access (dictation) "
+        "when accessing ULF Web from other machines on the LAN. The script:"
+    )
+    pdf.bullet("Installs Caddy from the official repository")
+    pdf.bullet("Grants Caddy permission to bind to port 443 without root (Linux)")
+    pdf.bullet("Generates a self-signed TLS certificate valid for 10 years, "
+               "including the detected LAN IP in the certificate's SAN field")
+    pdf.body_text(
+        "The included Caddyfile listens on port 443 and proxies requests to "
+        "the ULF Web backend on port 8000. Start Caddy in a separate terminal:"
+    )
+    pdf.body_text("    caddy run --config Caddyfile")
+    pdf.body_text(
+        "Users will see a browser warning on first visit because the certificate "
+        "is self-signed. After accepting it once, HTTPS works normally."
+    )
+
     pdf.subsection_title("After Installation")
     pdf.body_text("Once the script completes, download a GGUF model and start the server:")
     pdf.body_text("    source .venv/bin/activate")
     pdf.body_text("    python3 -m backend.main")
     pdf.body_text(
-        "Open http://localhost:8000 in your browser. The first run creates "
-        "the database automatically with a default admin account (username: "
-        "admin, password: admin). Change this password immediately."
+        "Then start Caddy for HTTPS access (in a separate terminal):"
+    )
+    pdf.body_text("    caddy run --config Caddyfile")
+    pdf.body_text(
+        "Open https://localhost (or https://<your-LAN-IP>) in your browser. "
+        "The first run creates the database automatically with a default admin "
+        "account (username: admin, password: admin). Change this password "
+        "immediately."
     )
 
     pdf.section_title("Manual Installation")
