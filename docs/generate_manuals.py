@@ -678,20 +678,75 @@ def generate_admin_manual():
     # Chapter 2: Installation & Configuration
     pdf.chapter_title(2, "Installation & Configuration")
 
+    pdf.section_title("Supported Platforms")
+    pdf.bullet("Linux (Debian/Ubuntu with apt)")
+    pdf.bullet("WSL2 (Windows Subsystem for Linux with Ubuntu)")
+    pdf.bullet("macOS (with Homebrew)")
+
     pdf.section_title("Prerequisites")
-    pdf.bullet("Python 3.10 or later")
-    pdf.bullet("llama.cpp compiled with the llama-server binary")
+    pdf.bullet("Git (to clone the repository)")
+    pdf.bullet("Internet access during installation (for packages and llama.cpp)")
     pdf.bullet("GGUF model files for the LLMs you wish to use")
     pdf.bullet("Sufficient RAM/VRAM for your chosen models")
 
-    pdf.section_title("Installation")
-    pdf.body_text("Set up ULF Web with the following steps:")
+    pdf.section_title("Automated Installation (Recommended)")
+    pdf.body_text(
+        "ULF Web includes a cross-platform install script that automates the "
+        "entire setup process. The script detects your platform, installs all "
+        "dependencies, builds llama.cpp, and produces a ready-to-run setup."
+    )
+    pdf.body_text("Clone the repository and run the installer:")
+    pdf.body_text("    git clone <repository-url> ulfweb")
+    pdf.body_text("    cd ulfweb")
+    pdf.body_text("    ./install.sh")
+    pdf.body_text("The install script performs the following steps:")
+    pdf.bullet("Detects your OS, package manager, CUDA/GPU availability, and Python version")
+    pdf.bullet("Installs system packages (Python, cmake, ffmpeg, fonts, etc.)")
+    pdf.bullet("Creates a Python virtual environment and installs all dependencies")
+    pdf.bullet("Clones and builds llama.cpp in a sibling directory (../llama.cpp)")
+    pdf.bullet("Generates config.yaml with auto-detected paths (if not already present)")
+    pdf.bullet("Creates required data directories (data/, models/, etc.)")
+
+    pdf.note_box(
+        "The script is idempotent and safe to run multiple times. It will "
+        "skip steps that are already complete and never overwrite an existing "
+        "config.yaml or data directory."
+    )
+
+    pdf.subsection_title("GPU Acceleration")
+    pdf.body_text(
+        "The install script automatically detects GPU availability and "
+        "configures llama.cpp accordingly:"
+    )
+    pdf.bold_bullet("NVIDIA GPU (Linux/WSL2)", "Builds with CUDA support. "
+                    "Installs nvidia-cuda-toolkit if nvidia-smi is present but nvcc is not.")
+    pdf.bold_bullet("Apple Silicon (macOS)", "Builds with Metal support for GPU acceleration.")
+    pdf.bold_bullet("No GPU", "Falls back to a CPU-only build.")
+
+    pdf.subsection_title("After Installation")
+    pdf.body_text("Once the script completes, download a GGUF model and start the server:")
+    pdf.body_text("    source .venv/bin/activate")
+    pdf.body_text("    python3 -m backend.main")
+    pdf.body_text(
+        "Open http://localhost:8000 in your browser. The first run creates "
+        "the database automatically with a default admin account (username: "
+        "admin, password: admin). Change this password immediately."
+    )
+
+    pdf.section_title("Manual Installation")
+    pdf.body_text(
+        "If you prefer to install manually or the automated script is not "
+        "suitable for your environment, follow these steps:"
+    )
     pdf.bullet("Clone the repository to your server")
+    pdf.bullet("Install system dependencies: Python 3.10+, cmake, build-essential, "
+               "ffmpeg, fonts-dejavu-core, libsqlcipher-dev")
     pdf.bullet("Create and activate a Python virtual environment:")
     pdf.body_text("    python3 -m venv .venv && source .venv/bin/activate")
-    pdf.bullet("Install dependencies:")
+    pdf.bullet("Install Python dependencies:")
     pdf.body_text("    pip install -r requirements.txt")
-    pdf.bullet("Configure the application (see Configuration below)")
+    pdf.bullet("Build llama.cpp (see https://github.com/ggml-org/llama.cpp)")
+    pdf.bullet("Create config.yaml (see Configuration below)")
     pdf.bullet("Start the server:")
     pdf.body_text("    python3 -m backend.main")
 
