@@ -525,6 +525,16 @@
                     </div>
                 </div>
                 <div class="backups-scan-row">
+                    <button class="add-btn" id="backup-scan-media-btn">Scan for Media</button>
+                    <span class="updates-scan-status" id="backup-scan-media-status"></span>
+                </div>
+
+                <div class="updates-drives-list hidden" id="backup-drives-section">
+                    <h3 class="updates-subtitle">Available Media</h3>
+                    <div id="backup-drives-list"></div>
+                </div>
+
+                <div class="backups-scan-row">
                     <input type="text" id="backup-scan-dir" placeholder="Scan directory (e.g. /mnt/usb)">
                     <button class="system-info-btn" id="backup-scan-btn">Scan</button>
                 </div>

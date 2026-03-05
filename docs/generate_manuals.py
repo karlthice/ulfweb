@@ -1277,6 +1277,37 @@ def generate_admin_manual():
         "backup outside the default location."
     )
 
+    pdf.section_title("Backing Up to USB Drive")
+    pdf.body_text(
+        "ULF Web supports backing up directly to a USB drive. To back up "
+        "to USB:"
+    )
+    pdf.body_text(
+        "1. Insert a USB drive into the server. The drive must be formatted "
+        "as exFAT (recommended) or FAT32. Do not use ext4 or other Linux "
+        "filesystems, as they will mount with root-only write permissions "
+        "and the backup will fail."
+    )
+    pdf.body_text(
+        "2. In the Backups dialog, click Scan for Media. ULF Web will "
+        "detect all mounted removable drives."
+    )
+    pdf.body_text(
+        "3. Click on the desired drive from the list. The drive path will "
+        "be set as the backup destination and any existing backups on the "
+        "drive will be listed."
+    )
+    pdf.body_text(
+        "4. Click Create Backup Now. The backup archive will be written "
+        "directly to the selected USB drive."
+    )
+    pdf.note_box(
+        "USB drives must be formatted as exFAT or FAT32. Drives formatted "
+        "with ext4 or other Linux filesystems mount as root-owned and are "
+        "not writable by ULF Web. If a backup fails with a permission "
+        "error, reformat the USB drive as exFAT."
+    )
+
     pdf.section_title("What Gets Backed Up")
     pdf.bold_bullet("data/ulfweb.db", "Database (safe VACUUM INTO snapshot)")
     pdf.bold_bullet("data/encryption.key", "Encryption key (critical)")
@@ -1291,9 +1322,10 @@ def generate_admin_manual():
 
     pdf.section_title("Browsing External Backups")
     pdf.body_text(
-        "To browse backups on a USB drive or network share, enter the "
-        "directory path in the Scan field and click Scan. The backup list "
-        "will show all ULF Web backup archives found in that directory."
+        "To browse backups on a USB drive, click Scan for Media and select "
+        "the drive. Any existing ULF Web backup archives on the drive will "
+        "be listed. You can also enter a directory path manually in the "
+        "Scan field and click Scan to browse backups at any location."
     )
 
     pdf.section_title("Restoring from a Backup")
