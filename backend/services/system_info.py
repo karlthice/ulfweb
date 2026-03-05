@@ -2,6 +2,8 @@
 
 import glob
 import os
+import shutil
+import subprocess
 
 
 def get_system_ram() -> dict:
@@ -29,17 +31,13 @@ def get_system_ram() -> dict:
         return {"total": 0, "used": 0, "available": 0}
 
 
-def get_gpu_vram() -> dict | None:
-    """Read AMD GPU VRAM via /sys/class/drm.
-
-    Returns dict with total, used, free in bytes, or None if no GPU found.
-    """
+def _get_gpu_vram_amd() -> dict | None:
+    """Read AMD GPU VRAM via /sys/class/drm."""
     try:
         total_files = sorted(glob.glob("/sys/class/drm/card*/device/mem_info_vram_total"))
         if not total_files:
             return None
 
-        # Use the first GPU found
         base = os.path.dirname(total_files[0])
 
         with open(os.path.join(base, "mem_info_vram_total")) as f:
@@ -51,16 +49,110 @@ def get_gpu_vram() -> dict | None:
             "total": total,
             "used": used,
             "free": total - used,
+            "vendor": "amd",
         }
     except Exception:
         return None
+
+
+def _get_gpu_vram_nvidia() -> dict | None:
+    """Read NVIDIA GPU VRAM via nvidia-smi."""
+    if not shutil.which("nvidia-smi"):
+        return None
+    try:
+        result = subprocess.run(
+            ["nvidia-smi", "--query-gpu=memory.total,memory.used,memory.free",
+             "--format=csv,noheader,nounits"],
+            capture_output=True, text=True, timeout=5,
+        )
+        if result.returncode != 0:
+            return None
+
+        # Use first GPU; values are in MiB
+        line = result.stdout.strip().splitlines()[0]
+        total_mib, used_mib, free_mib = (int(v.strip()) for v in line.split(","))
+
+        return {
+            "total": total_mib * 1024 * 1024,
+            "used": used_mib * 1024 * 1024,
+            "free": free_mib * 1024 * 1024,
+            "vendor": "nvidia",
+        }
+    except Exception:
+        return None
+
+
+def get_gpu_vram() -> dict | None:
+    """Detect GPU VRAM (AMD or NVIDIA).
+
+    Returns dict with total, used, free in bytes, or None if no GPU found.
+    """
+    return _get_gpu_vram_amd() or _get_gpu_vram_nvidia()
+
+
+def _get_process_vram_nvidia(pid: int) -> int:
+    """Get VRAM usage for a specific process via nvidia-smi."""
+    if not shutil.which("nvidia-smi"):
+        return 0
+    try:
+        result = subprocess.run(
+            ["nvidia-smi", "--query-compute-apps=pid,used_gpu_memory",
+             "--format=csv,noheader,nounits"],
+            capture_output=True, text=True, timeout=5,
+        )
+        if result.returncode != 0:
+            return 0
+
+        for line in result.stdout.strip().splitlines():
+            parts = line.split(",")
+            if len(parts) == 2 and int(parts[0].strip()) == pid:
+                return int(parts[1].strip()) * 1024 * 1024  # MiB -> bytes
+        return 0
+    except Exception:
+        return 0
+
+
+def _get_process_vram_amd(pid: int) -> tuple[int, int]:
+    """Get VRAM and GTT usage for a specific process via /proc fdinfo (AMD).
+
+    Returns (vram_bytes, gtt_bytes).
+    """
+    vram_bytes = 0
+    gtt_bytes = 0
+    fdinfo_dir = f"/proc/{pid}/fdinfo"
+    try:
+        for entry in os.listdir(fdinfo_dir):
+            try:
+                with open(os.path.join(fdinfo_dir, entry)) as f:
+                    found_drm = False
+                    for line in f:
+                        if line.startswith("drm-total-vram:"):
+                            # Value is in KiB
+                            val = int(line.split()[1])
+                            if val > vram_bytes:
+                                vram_bytes = val
+                            found_drm = True
+                        elif line.startswith("drm-total-gtt:"):
+                            val = int(line.split()[1])
+                            if val > gtt_bytes:
+                                gtt_bytes = val
+                            found_drm = True
+                        elif found_drm and not line.startswith("drm-"):
+                            break
+            except (PermissionError, OSError):
+                continue
+    except (PermissionError, OSError):
+        pass
+
+    # Convert KiB to bytes
+    return vram_bytes * 1024, gtt_bytes * 1024
 
 
 def get_process_memory(pid: int) -> dict | None:
     """Get RAM and VRAM usage for a specific process.
 
     Reads VmRSS from /proc/{pid}/status for RAM.
-    Scans /proc/{pid}/fdinfo/* for drm-total-vram and drm-total-gtt (AMD GPU).
+    Supports both AMD (fdinfo) and NVIDIA (nvidia-smi) GPUs.
 
     Returns dict with ram_bytes, vram_bytes, gtt_bytes, or None if process not found.
     """
@@ -75,37 +167,10 @@ def get_process_memory(pid: int) -> dict | None:
                     ram_bytes = int(parts[1]) * 1024  # kB -> bytes
                     break
 
-        # Read per-process GPU memory from fdinfo
-        vram_bytes = 0
-        gtt_bytes = 0
-        fdinfo_dir = f"/proc/{pid}/fdinfo"
-        try:
-            for entry in os.listdir(fdinfo_dir):
-                try:
-                    with open(os.path.join(fdinfo_dir, entry)) as f:
-                        found_drm = False
-                        for line in f:
-                            if line.startswith("drm-total-vram:"):
-                                # Value is in KiB
-                                val = int(line.split()[1])
-                                if val > vram_bytes:
-                                    vram_bytes = val
-                                found_drm = True
-                            elif line.startswith("drm-total-gtt:"):
-                                val = int(line.split()[1])
-                                if val > gtt_bytes:
-                                    gtt_bytes = val
-                                found_drm = True
-                            elif found_drm and not line.startswith("drm-"):
-                                break
-                except (PermissionError, OSError):
-                    continue
-        except (PermissionError, OSError):
-            pass
-
-        # Convert KiB to bytes for GPU values
-        vram_bytes *= 1024
-        gtt_bytes *= 1024
+        # Try AMD first (no subprocess overhead), then NVIDIA
+        vram_bytes, gtt_bytes = _get_process_vram_amd(pid)
+        if vram_bytes == 0:
+            vram_bytes = _get_process_vram_nvidia(pid)
 
         return {
             "ram_bytes": ram_bytes,
