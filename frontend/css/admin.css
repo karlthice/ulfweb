@@ -1015,3 +1015,82 @@
     color: var(--accent);
     font-weight: 500;
 }
+
+/* Updates Modal */
+.updates-modal-content {
+    max-width: 900px;
+}
+
+.updates-version-row {
+    margin-bottom: 1rem;
+    font-size: 0.9rem;
+    color: var(--text-secondary);
+}
+
+.updates-scan-row {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    margin-bottom: 1rem;
+}
+
+.updates-scan-status {
+    font-size: 0.85rem;
+    color: var(--text-muted);
+}
+
+.updates-subtitle {
+    font-size: 0.95rem;
+    font-weight: 600;
+    color: var(--text-primary);
+    margin: 1rem 0 0.5rem;
+}
+
+.updates-drives-list {
+    margin-bottom: 1rem;
+}
+
+.updates-drive-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0.75rem 1rem;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    margin-bottom: 0.5rem;
+    cursor: pointer;
+    transition: border-color 0.2s;
+}
+
+.updates-drive-item:hover {
+    border-color: var(--accent);
+}
+
+.updates-drive-name {
+    font-weight: 500;
+    color: var(--text-primary);
+}
+
+.updates-drive-path {
+    font-size: 0.8rem;
+    color: var(--text-muted);
+    font-family: monospace;
+}
+
+.updates-drive-arrow {
+    color: var(--text-muted);
+    font-size: 1.2rem;
+}
+
+.updates-packages-section,
+.updates-models-section {
+    margin-bottom: 1rem;
+}
+
+.updates-progress {
+    margin-top: 0.75rem;
+    font-size: 0.85rem;
+    color: var(--accent);
+    font-weight: 500;
+}

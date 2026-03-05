@@ -112,6 +112,8 @@ const admin = {
                 this.closeModal('file-info-modal');
                 this.closeModal('backups-modal');
                 this.closeModal('restore-confirm-modal');
+                this.closeModal('updates-modal');
+                this.closeModal('update-confirm-modal');
             }
         });
 
@@ -218,6 +220,17 @@ const admin = {
         document.getElementById('close-set-password-modal').addEventListener('click', () => this.closeModal('set-password-modal'));
         document.getElementById('set-password-modal-overlay').addEventListener('click', () => this.closeModal('set-password-modal'));
         document.getElementById('save-set-password-btn').addEventListener('click', () => this.saveSetPassword());
+
+        // Updates
+        document.getElementById('updates-btn').addEventListener('click', () => this.openUpdatesModal());
+        document.getElementById('close-updates-modal').addEventListener('click', () => this.closeModal('updates-modal'));
+        document.getElementById('updates-modal-overlay').addEventListener('click', () => this.closeModal('updates-modal'));
+        document.getElementById('scan-usb-btn').addEventListener('click', () => this.scanUsb());
+
+        // Update confirmation
+        document.getElementById('close-update-confirm-modal').addEventListener('click', () => this.closeModal('update-confirm-modal'));
+        document.getElementById('update-confirm-modal-overlay').addEventListener('click', () => this.closeModal('update-confirm-modal'));
+        document.getElementById('confirm-update-btn').addEventListener('click', () => this.executeUpdate());
 
         // Backups
         document.getElementById('backups-btn').addEventListener('click', () => this.openBackupsModal());
@@ -1719,6 +1732,250 @@ const admin = {
             this.loadBackups();
         } catch (e) {
             alert('Delete failed: ' + e.message);
+        }
+    },
+
+    // --- Updates ---
+
+    async openUpdatesModal() {
+        document.getElementById('updates-modal').classList.remove('hidden');
+        // Reset state
+        document.getElementById('updates-drives-section').classList.add('hidden');
+        document.getElementById('updates-packages-section').classList.add('hidden');
+        document.getElementById('updates-models-section').classList.add('hidden');
+        document.getElementById('updates-progress').classList.add('hidden');
+        document.getElementById('updates-scan-status').textContent = '';
+
+        // Fetch current version
+        try {
+            const resp = await fetch(`${API_BASE}/admin/updates/version`);
+            if (resp.ok) {
+                const data = await resp.json();
+                document.getElementById('updates-current-version').textContent = data.version;
+            }
+        } catch (e) {
+            document.getElementById('updates-current-version').textContent = 'unknown';
+        }
+    },
+
+    async scanUsb() {
+        const btn = document.getElementById('scan-usb-btn');
+        const status = document.getElementById('updates-scan-status');
+        btn.disabled = true;
+        status.textContent = 'Scanning...';
+
+        // Hide previous results
+        document.getElementById('updates-packages-section').classList.add('hidden');
+        document.getElementById('updates-models-section').classList.add('hidden');
+
+        try {
+            const resp = await fetch(`${API_BASE}/admin/updates/scan`);
+            if (!resp.ok) throw new Error('Failed to scan for USB drives');
+            const data = await resp.json();
+
+            const section = document.getElementById('updates-drives-section');
+            const list = document.getElementById('updates-drives-list');
+
+            if (!data.drives || data.drives.length === 0) {
+                list.innerHTML = '<p style="color: var(--text-muted); font-style: italic;">No USB drives found. Make sure a USB drive is plugged in and mounted.</p>';
+                section.classList.remove('hidden');
+                status.textContent = 'No drives found';
+                return;
+            }
+
+            list.innerHTML = data.drives.map(d => {
+                const escapedPath = this.escapeHtml(d.path);
+                const escapedName = this.escapeHtml(d.name);
+                return `<div class="updates-drive-item" onclick="admin.scanDrive('${escapedPath}')">
+                    <div>
+                        <div class="updates-drive-name">${escapedName}</div>
+                        <div class="updates-drive-path">${escapedPath}</div>
+                    </div>
+                    <span class="updates-drive-arrow">&rarr;</span>
+                </div>`;
+            }).join('');
+
+            section.classList.remove('hidden');
+            status.textContent = `${data.drives.length} drive(s) found`;
+        } catch (e) {
+            status.textContent = 'Scan failed: ' + e.message;
+        } finally {
+            btn.disabled = false;
+        }
+    },
+
+    async scanDrive(drivePath) {
+        const progress = document.getElementById('updates-progress');
+        const progressText = document.getElementById('updates-progress-text');
+        progress.classList.remove('hidden');
+        progressText.textContent = 'Scanning drive...';
+
+        try {
+            // Scan for packages and models in parallel
+            const [packagesResp, modelsResp] = await Promise.all([
+                fetch(`${API_BASE}/admin/updates/scan-packages?usb_path=${encodeURIComponent(drivePath)}`),
+                fetch(`${API_BASE}/admin/updates/scan-models?usb_path=${encodeURIComponent(drivePath)}`),
+            ]);
+
+            if (packagesResp.ok) {
+                const data = await packagesResp.json();
+                this.renderUpdatePackages(data.packages || []);
+            }
+
+            if (modelsResp.ok) {
+                const data = await modelsResp.json();
+                this.renderUsbModels(data.models || []);
+            }
+        } catch (e) {
+            progressText.textContent = 'Scan failed: ' + e.message;
+            return;
+        }
+
+        progress.classList.add('hidden');
+    },
+
+    renderUpdatePackages(packages) {
+        const section = document.getElementById('updates-packages-section');
+        const tbody = document.getElementById('updates-packages-tbody');
+
+        if (packages.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="5" class="activity-log-empty">No update packages found on this drive</td></tr>';
+            section.classList.remove('hidden');
+            return;
+        }
+
+        tbody.innerHTML = packages.map(p => {
+            const sizeMB = (p.size / 1024 / 1024).toFixed(1);
+            const escapedPath = this.escapeHtml(p.path);
+            const escapedVersion = this.escapeHtml(p.version);
+            const escapedDesc = this.escapeHtml(p.description);
+            return `<tr>
+                <td><strong>${escapedVersion}</strong></td>
+                <td class="fileinfo-date">${this.escapeHtml(p.date)}</td>
+                <td>${escapedDesc}</td>
+                <td class="fileinfo-size">${sizeMB} MB</td>
+                <td>
+                    <button class="action-btn" onclick="admin.confirmUpdate('${escapedPath}', '${escapedVersion}', '${escapedDesc}')">Install</button>
+                </td>
+            </tr>`;
+        }).join('');
+
+        section.classList.remove('hidden');
+    },
+
+    renderUsbModels(models) {
+        const section = document.getElementById('updates-models-section');
+        const tbody = document.getElementById('updates-models-tbody');
+
+        if (models.length === 0) {
+            section.classList.add('hidden');
+            return;
+        }
+
+        tbody.innerHTML = models.map(m => {
+            const sizeGB = (m.size / 1024 / 1024 / 1024).toFixed(1);
+            const escapedPath = this.escapeHtml(m.path);
+            const escapedName = this.escapeHtml(m.filename);
+            return `<tr>
+                <td class="fileinfo-name">${escapedName}</td>
+                <td class="fileinfo-size">${sizeGB} GB</td>
+                <td>
+                    <button class="action-btn" onclick="admin.importModel('${escapedPath}', '${escapedName}')">Import</button>
+                </td>
+            </tr>`;
+        }).join('');
+
+        section.classList.remove('hidden');
+    },
+
+    confirmUpdate(packagePath, version, description) {
+        document.getElementById('update-confirm-path').value = packagePath;
+        document.getElementById('update-confirm-version').textContent = 'v' + version;
+        document.getElementById('update-confirm-description').textContent = description;
+        document.getElementById('update-confirm-modal').classList.remove('hidden');
+    },
+
+    async executeUpdate() {
+        const path = document.getElementById('update-confirm-path').value;
+        const btn = document.getElementById('confirm-update-btn');
+        btn.disabled = true;
+        btn.textContent = 'Installing...';
+
+        try {
+            const resp = await fetch(`${API_BASE}/admin/updates/apply`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ package_path: path }),
+            });
+
+            if (!resp.ok) {
+                const err = await resp.json();
+                throw new Error(err.detail || 'Update failed');
+            }
+        } catch (e) {
+            if (e.message && !e.message.includes('Failed to fetch')) {
+                // Real error, not a connection drop from restart
+                alert('Update failed: ' + e.message);
+                btn.disabled = false;
+                btn.textContent = 'Install Update and Restart';
+                return;
+            }
+            // Connection dropped — expected during restart
+        }
+
+        this.closeModal('update-confirm-modal');
+        this.closeModal('updates-modal');
+
+        // Show a restart overlay
+        btn.textContent = 'Restarting...';
+
+        // Poll /health until the server is back up
+        const pollHealth = () => {
+            setTimeout(async () => {
+                try {
+                    const response = await fetch('/health');
+                    if (response.ok) {
+                        window.location.reload();
+                        return;
+                    }
+                } catch (e) {
+                    // Server still down
+                }
+                pollHealth();
+            }, 1000);
+        };
+
+        // Wait before starting to poll (give time for restart)
+        setTimeout(pollHealth, 2000);
+    },
+
+    async importModel(sourcePath, filename) {
+        if (!confirm(`Import model "${filename}" to the models directory?`)) return;
+
+        const progress = document.getElementById('updates-progress');
+        const progressText = document.getElementById('updates-progress-text');
+        progress.classList.remove('hidden');
+        progressText.textContent = `Importing ${filename}... (this may take a while for large files)`;
+
+        try {
+            const resp = await fetch(`${API_BASE}/admin/updates/import-model`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ source_path: sourcePath }),
+            });
+
+            if (!resp.ok) {
+                const err = await resp.json();
+                throw new Error(err.detail || 'Import failed');
+            }
+
+            const result = await resp.json();
+            const sizeGB = (result.size / 1024 / 1024 / 1024).toFixed(1);
+            alert(`Model imported: ${result.filename} (${sizeGB} GB)`);
+        } catch (e) {
+            alert('Import failed: ' + e.message);
+        } finally {
+            progress.classList.add('hidden');
         }
     }
 };

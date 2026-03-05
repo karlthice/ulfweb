@@ -12,12 +12,16 @@ from backend.auth import require_admin
 
 from backend.config import settings
 from backend.database import init_database
-from backend.routers import admin, auth, backup, chat, conversations, documents, models, settings as settings_router, stt, translate, tts, users, vault
+from backend.routers import admin, auth, backup, chat, conversations, documents, models, settings as settings_router, stt, translate, tts, update, users, vault
 from backend.services.llama_manager import llama_manager
 from backend.services.backup_service import backup_service
 from backend.services import storage
 
 logger = logging.getLogger("ulfweb")
+
+# Read version from VERSION file
+_version_file = Path(__file__).parent.parent / "VERSION"
+APP_VERSION = _version_file.read_text().strip() if _version_file.exists() else "0.0.0"
 
 
 @asynccontextmanager
@@ -64,7 +68,7 @@ async def lifespan(app: FastAPI):
 app = FastAPI(
     title="ulfweb",
     description="Chat web application for llama.cpp",
-    version="1.0.0",
+    version=APP_VERSION,
     lifespan=lifespan
 )
 
@@ -82,6 +86,7 @@ app.include_router(tts.router, prefix="/api/v1")
 app.include_router(stt.router, prefix="/api/v1")
 app.include_router(vault.router, prefix="/api/v1")
 app.include_router(backup.router, prefix="/api/v1")
+app.include_router(update.router, prefix="/api/v1")
 
 # Serve static files
 frontend_path = Path(__file__).parent.parent / "frontend"
@@ -115,7 +120,7 @@ async def serve_admin(request: Request):
 @app.get("/health")
 async def health_check():
     """Health check endpoint."""
-    return {"status": "ok"}
+    return {"status": "ok", "version": APP_VERSION}
 
 
 if __name__ == "__main__":

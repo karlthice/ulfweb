@@ -25,6 +25,7 @@
                 <button class="system-info-btn" id="user-mgmt-btn">Users</button>
                 <button class="system-info-btn" id="activity-log-btn">User Logs</button>
                 <button class="system-info-btn" id="backups-btn">Backups</button>
+                <button class="system-info-btn" id="updates-btn">Updates</button>
                 <button class="system-info-btn" id="system-info-btn">System Info</button>
                 <button class="restart-ulfweb-btn" id="restart-ulfweb-btn">Restart ULF Web</button>
                 <a href="/" class="back-link">Back to Chat</a>
@@ -564,6 +565,95 @@
             </div>
             <div class="modal-footer">
                 <button class="restart-ulfweb-btn" id="confirm-restore-btn">Restore and Restart</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Updates Modal -->
+    <div class="modal hidden" id="updates-modal">
+        <div class="modal-overlay" id="updates-modal-overlay"></div>
+        <div class="modal-content updates-modal-content">
+            <div class="modal-header">
+                <h2>Updates</h2>
+                <button class="close-btn" id="close-updates-modal">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="updates-version-row">
+                    <span>Current version: <strong id="updates-current-version">—</strong></span>
+                </div>
+
+                <div class="updates-scan-row">
+                    <button class="add-btn" id="scan-usb-btn">Scan for USB Drives</button>
+                    <span class="updates-scan-status" id="updates-scan-status"></span>
+                </div>
+
+                <div class="updates-drives-list hidden" id="updates-drives-section">
+                    <h3 class="updates-subtitle">USB Drives</h3>
+                    <div id="updates-drives-list"></div>
+                </div>
+
+                <div class="updates-packages-section hidden" id="updates-packages-section">
+                    <h3 class="updates-subtitle">Update Packages</h3>
+                    <div class="activity-log-table-wrap">
+                        <table class="activity-log-table">
+                            <thead>
+                                <tr>
+                                    <th>Version</th>
+                                    <th>Date</th>
+                                    <th>Description</th>
+                                    <th>Size</th>
+                                    <th>Action</th>
+                                </tr>
+                            </thead>
+                            <tbody id="updates-packages-tbody">
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <div class="updates-models-section hidden" id="updates-models-section">
+                    <h3 class="updates-subtitle">Models on USB</h3>
+                    <div class="activity-log-table-wrap">
+                        <table class="activity-log-table">
+                            <thead>
+                                <tr>
+                                    <th>Filename</th>
+                                    <th>Size</th>
+                                    <th>Action</th>
+                                </tr>
+                            </thead>
+                            <tbody id="updates-models-tbody">
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <div class="updates-progress hidden" id="updates-progress">
+                    <span id="updates-progress-text">Working...</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Update Confirmation Modal -->
+    <div class="modal hidden" id="update-confirm-modal">
+        <div class="modal-overlay" id="update-confirm-modal-overlay"></div>
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>Confirm Update</h2>
+                <button class="close-btn" id="close-update-confirm-modal">&times;</button>
+            </div>
+            <div class="modal-body">
+                <p style="color: var(--error); font-weight: 600; margin-bottom: 0.75rem;">
+                    Warning: This will update the application code and restart the server.
+                </p>
+                <p>Installing: <strong id="update-confirm-version"></strong></p>
+                <p id="update-confirm-description" style="color: var(--text-secondary); margin-top: 0.5rem;"></p>
+                <p style="margin-top: 0.75rem;">A backup will be created automatically before the update. All active connections will be interrupted during restart.</p>
+                <input type="hidden" id="update-confirm-path">
+            </div>
+            <div class="modal-footer">
+                <button class="restart-ulfweb-btn" id="confirm-update-btn">Install Update and Restart</button>
             </div>
         </div>
     </div>
