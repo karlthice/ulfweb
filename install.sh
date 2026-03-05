@@ -240,6 +240,7 @@ header "Configuration"
 
 # Resolve to absolute path for config
 LLAMA_SERVER_ABS="$(cd "$LLAMA_DIR/build/bin" && pwd)/llama-server"
+LLAMA_DIR_ABS="$(cd "$LLAMA_DIR" && pwd)"
 MODELS_DIR_ABS="$SCRIPT_DIR/models"
 
 if [ -f "config.yaml" ]; then
@@ -270,7 +271,7 @@ defaults:
   model: ""
 
 models:
-  path: "$MODELS_DIR_ABS"
+  path: "$MODELS_DIR_ABS,$LLAMA_DIR_ABS/models"
   llama_server: "$LLAMA_SERVER_ABS"
 
 encryption:

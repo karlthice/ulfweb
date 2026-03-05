@@ -36,8 +36,8 @@ _SPLIT_PART_PATTERN = re.compile(r'-0000[2-9]-of-\d+\.gguf$|-000[1-9][0-9]-of-\d
 _FIRST_PART_PATTERN = re.compile(r'-00001-of-(\d+)\.gguf$')
 
 
-def _scan_model_files(models_dir: Path) -> list[dict]:
-    """Scan a directory for .gguf model files, combining split model sizes."""
+def _scan_model_dir(models_dir: Path) -> list[dict]:
+    """Scan a single directory for .gguf model files, combining split model sizes."""
     results = []
     for f in models_dir.glob("*.gguf"):
         if "mmproj" in f.name.lower():
@@ -65,6 +65,20 @@ def _scan_model_files(models_dir: Path) -> list[dict]:
             "size_bytes": size,
             "mtime": stat.st_mtime,
         })
+    return results
+
+
+def _scan_model_files(models_path: str) -> list[dict]:
+    """Scan one or more comma-separated directories for .gguf model files."""
+    results = []
+    seen = set()
+    for raw_dir in models_path.split(","):
+        d = Path(raw_dir.strip())
+        if d.exists() and d.is_dir():
+            for m in _scan_model_dir(d):
+                if m["name"] not in seen:
+                    seen.add(m["name"])
+                    results.append(m)
     return results
 
 
@@ -122,20 +136,16 @@ async def system_info():
 
 @router.get("/models")
 async def get_available_models():
-    """List available .gguf model files from the configured models directory."""
+    """List available .gguf model files from the configured models directories."""
     models_path = settings.models.path
 
     if not models_path:
         return {"models": [], "configured": False}
 
-    models_dir = Path(models_path)
-    if not models_dir.exists() or not models_dir.is_dir():
-        return {"models": [], "configured": True, "error": f"Models directory not found: {models_path}"}
-
     min_size = 100 * 1024 * 1024  # 100 MB
     models = [
         {"filename": m["name"], "path": str(m["path"]), "size_bytes": m["size_bytes"]}
-        for m in _scan_model_files(models_dir)
+        for m in _scan_model_files(models_path)
         if m["size_bytes"] >= min_size
     ]
 
@@ -454,17 +464,15 @@ async def get_file_info():
     model_files = []
     models_path = settings.models.path
     if models_path:
-        models_dir = Path(models_path)
-        if models_dir.exists():
-            model_files = [
-                {
-                    "name": m["name"],
-                    "size_bytes": m["size_bytes"],
-                    "modified": datetime.fromtimestamp(m["mtime"], tz=timezone.utc).isoformat(),
-                    "age_seconds": now - m["mtime"],
-                }
-                for m in _scan_model_files(models_dir)
-            ]
-            model_files.sort(key=lambda f: f["age_seconds"])
+        model_files = [
+            {
+                "name": m["name"],
+                "size_bytes": m["size_bytes"],
+                "modified": datetime.fromtimestamp(m["mtime"], tz=timezone.utc).isoformat(),
+                "age_seconds": now - m["mtime"],
+            }
+            for m in _scan_model_files(models_path)
+        ]
+        model_files.sort(key=lambda f: f["age_seconds"])
 
     return {"project_files": project_files, "model_files": model_files}
