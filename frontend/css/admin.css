@@ -954,3 +954,64 @@
     font-size: 0.8rem;
     color: var(--text-secondary);
 }
+
+/* Backups Modal */
+.backups-modal-content {
+    max-width: 900px;
+}
+
+.backups-actions {
+    margin-bottom: 1rem;
+}
+
+.backups-create-row {
+    display: flex;
+    gap: 0.75rem;
+    align-items: center;
+}
+
+.backups-create-row input {
+    flex: 1;
+    padding: 0.5rem 0.75rem;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    color: var(--text-primary);
+    font-family: inherit;
+    font-size: 0.85rem;
+}
+
+.backups-create-row input:focus {
+    outline: none;
+    border-color: var(--accent);
+}
+
+.backups-scan-row {
+    display: flex;
+    gap: 0.75rem;
+    align-items: center;
+    margin-bottom: 1rem;
+}
+
+.backups-scan-row input {
+    flex: 1;
+    padding: 0.5rem 0.75rem;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    color: var(--text-primary);
+    font-family: inherit;
+    font-size: 0.85rem;
+}
+
+.backups-scan-row input:focus {
+    outline: none;
+    border-color: var(--accent);
+}
+
+.backup-progress {
+    margin-top: 0.5rem;
+    font-size: 0.85rem;
+    color: var(--accent);
+    font-weight: 500;
+}

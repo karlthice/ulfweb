@@ -12,8 +12,9 @@ from backend.auth import require_admin
 
 from backend.config import settings
 from backend.database import init_database
-from backend.routers import admin, auth, chat, conversations, documents, models, settings as settings_router, stt, translate, tts, users, vault
+from backend.routers import admin, auth, backup, chat, conversations, documents, models, settings as settings_router, stt, translate, tts, users, vault
 from backend.services.llama_manager import llama_manager
+from backend.services.backup_service import backup_service
 from backend.services import storage
 
 logger = logging.getLogger("ulfweb")
@@ -51,8 +52,12 @@ async def lifespan(app: FastAPI):
     else:
         logger.info("Encryption at rest is DISABLED")
 
+    # Start backup scheduler
+    backup_service.start_scheduler()
+
     yield
-    # Cleanup llama.cpp processes on shutdown
+    # Cleanup
+    backup_service.stop_scheduler()
     llama_manager.cleanup()
 
 
@@ -76,6 +81,7 @@ app.include_router(documents.router, prefix="/api/v1")
 app.include_router(tts.router, prefix="/api/v1")
 app.include_router(stt.router, prefix="/api/v1")
 app.include_router(vault.router, prefix="/api/v1")
+app.include_router(backup.router, prefix="/api/v1")
 
 # Serve static files
 frontend_path = Path(__file__).parent.parent / "frontend"
@@ -113,11 +119,22 @@ async def health_check():
 
 
 if __name__ == "__main__":
+    import argparse
     import uvicorn
-    uvicorn.run(
-        "backend.main:app",
-        host=settings.server.host,
-        port=settings.server.port,
-        reload=True,
-        reload_excludes=["data/*"],
+
+    parser = argparse.ArgumentParser(description="ULF Web server")
+    parser.add_argument(
+        "--reload", action="store_true",
+        help="Enable auto-reload for development",
     )
+    args = parser.parse_args()
+
+    run_kwargs = {
+        "host": settings.server.host,
+        "port": settings.server.port,
+    }
+    if args.reload:
+        run_kwargs["reload"] = True
+        run_kwargs["reload_excludes"] = ["data/*"]
+
+    uvicorn.run("backend.main:app", **run_kwargs)

@@ -642,7 +642,8 @@ def generate_admin_manual():
         (6, "Document Collections"),
         (7, "Security & Encryption"),
         (8, "Monitoring & Analytics"),
-        (9, "Maintenance & Troubleshooting"),
+        (9, "Backup & Restore"),
+        (10, "Maintenance & Troubleshooting"),
     ]
     pdf.toc_page(toc)
 
@@ -707,6 +708,7 @@ def generate_admin_manual():
     pdf.bullet("Generates config.yaml with auto-detected paths (if not already present)")
     pdf.bullet("Creates required data directories (data/, models/, etc.)")
     pdf.bullet("Installs Caddy web server and generates a self-signed TLS certificate for HTTPS")
+    pdf.bullet("Sets up systemd services for auto-start on boot (Linux only)")
 
     pdf.note_box(
         "The script is idempotent and safe to run multiple times. It will "
@@ -745,7 +747,14 @@ def generate_admin_manual():
     )
 
     pdf.subsection_title("After Installation")
-    pdf.body_text("Once the script completes, download a GGUF model and start the server:")
+    pdf.body_text(
+        "On Linux with systemd, both the backend and Caddy services are "
+        "started automatically by the install script. Download a GGUF model "
+        "and open your browser."
+    )
+    pdf.body_text(
+        "On macOS or WSL2 (no systemd), start the server manually:"
+    )
     pdf.body_text("    source .venv/bin/activate")
     pdf.body_text("    python3 -m backend.main")
     pdf.body_text(
@@ -822,6 +831,32 @@ def generate_admin_manual():
     pdf.bullet("ULFWEB_DATABASE_PATH \u2014 Override the database file path")
     pdf.bullet("ULFWEB_SERVER_HOST \u2014 Override the bind address")
     pdf.bullet("ULFWEB_SERVER_PORT \u2014 Override the HTTP port")
+
+    pdf.section_title("Automatic Startup (systemd)")
+    pdf.body_text(
+        "On Linux systems with systemd, the install script sets up two "
+        "services so that ULF Web starts automatically on boot:"
+    )
+    pdf.bold_bullet("ulfweb.service", "Runs the Python backend "
+                    "(python3 -m backend.main) on port 8000. Automatically "
+                    "restarts on failure.")
+    pdf.bold_bullet("ulfweb-caddy.service", "Runs the Caddy HTTPS reverse "
+                    "proxy on port 443. Starts after ulfweb.service.")
+    pdf.body_text(
+        "Both services are enabled and started during installation. They "
+        "will start automatically after a reboot. On macOS and WSL2, "
+        "systemd is not available and this step is skipped."
+    )
+    pdf.body_text("To check the status of the services:")
+    pdf.body_text("    sudo systemctl status ulfweb")
+    pdf.body_text("    sudo systemctl status ulfweb-caddy")
+    pdf.body_text("To view live logs:")
+    pdf.body_text("    sudo journalctl -u ulfweb -f")
+
+    pdf.note_box(
+        "For development, run the server manually with the --reload flag "
+        "instead of using the systemd service: python3 -m backend.main --reload"
+    )
 
     # Chapter 3: Server Management
     pdf.chapter_title(3, "Server Management")
@@ -1208,8 +1243,82 @@ def generate_admin_manual():
         "running. Check server logs when status shows an error."
     )
 
-    # Chapter 9: Maintenance & Troubleshooting
-    pdf.chapter_title(9, "Maintenance & Troubleshooting")
+    # Chapter 9: Backup & Restore
+    pdf.chapter_title(9, "Backup & Restore")
+
+    pdf.body_text(
+        "ULF Web includes an automatic backup system that protects user data "
+        "including the database, encryption key, vault files, document uploads, "
+        "and meeting transcription data. Backups are stored as compressed "
+        "tar.gz archives."
+    )
+
+    pdf.section_title("Automatic Daily Backups")
+    pdf.body_text(
+        "The backup scheduler starts automatically when ULF Web launches. "
+        "It checks every 60 seconds whether today's backup already exists. "
+        "If not, it creates a new backup and rotates older ones, keeping the "
+        "7 most recent backups. Daily backups are stored in data/backups/."
+    )
+
+    pdf.section_title("Backup Failure Banner")
+    pdf.body_text(
+        "If an automatic backup fails, a red warning banner appears at the top "
+        "of every page (both the main chat and admin panel). The banner displays "
+        "the error message and instructs users to contact an administrator. "
+        "The banner disappears once a successful backup completes."
+    )
+
+    pdf.section_title("Manual Backups")
+    pdf.body_text(
+        "To create a manual backup, open the admin panel, click Backups in the "
+        "header, and click Create Backup Now. You can optionally specify a "
+        "destination path (e.g. /mnt/usb or a network share) to save the "
+        "backup outside the default location."
+    )
+
+    pdf.section_title("What Gets Backed Up")
+    pdf.bold_bullet("data/ulfweb.db", "Database (safe VACUUM INTO snapshot)")
+    pdf.bold_bullet("data/encryption.key", "Encryption key (critical)")
+    pdf.bold_bullet("data/vault/", "Vault records (documents, images)")
+    pdf.bold_bullet("data/uploads/", "Document uploads")
+    pdf.bold_bullet("data/meeting_chunks/", "Meeting transcription data")
+    pdf.body_text(
+        "Large directories such as data/voices/ (TTS models), data/logs/, "
+        "and data/models/ are excluded because they are regenerable or "
+        "non-critical."
+    )
+
+    pdf.section_title("Browsing External Backups")
+    pdf.body_text(
+        "To browse backups on a USB drive or network share, enter the "
+        "directory path in the Scan field and click Scan. The backup list "
+        "will show all ULF Web backup archives found in that directory."
+    )
+
+    pdf.section_title("Restoring from a Backup")
+    pdf.body_text(
+        "To restore from a backup, click Restore next to the desired backup "
+        "in the backup list. A confirmation dialog warns that all current data "
+        "will be replaced. After confirming, ULF Web extracts the archive, "
+        "replaces the database and data files, and restarts the application."
+    )
+    pdf.note_box(
+        "Restoring a backup replaces ALL current data with the backup contents. "
+        "This operation cannot be undone. Create a fresh backup before restoring "
+        "if you want to preserve the current state."
+    )
+
+    pdf.section_title("Backup Archive Format")
+    pdf.body_text(
+        "Backups are named ulfweb-backup-YYYY-MM-DD-HHMMSS.tar.gz. "
+        "They can be extracted with standard tar tools:"
+    )
+    pdf.body_text("    tar tzf ulfweb-backup-2025-01-15-143022.tar.gz")
+    pdf.body_text("    tar xzf ulfweb-backup-2025-01-15-143022.tar.gz -C /tmp/restore")
+
+    # Chapter 10: Maintenance & Troubleshooting
+    pdf.chapter_title(10, "Maintenance & Troubleshooting")
 
     pdf.section_title("Restarting ULF Web")
     pdf.body_text(
@@ -1219,10 +1328,44 @@ def generate_admin_manual():
         "cleaned up during shutdown."
     )
 
-    pdf.section_title("Starting the Application")
-    pdf.body_text("To start ULF Web from the command line:")
+    pdf.section_title("Service Management (systemd)")
+    pdf.body_text(
+        "On Linux systems where the install script set up systemd services, "
+        "use the following commands to manage ULF Web:"
+    )
+    pdf.subsection_title("Check Status")
+    pdf.body_text("    sudo systemctl status ulfweb")
+    pdf.body_text("    sudo systemctl status ulfweb-caddy")
+
+    pdf.subsection_title("Start / Stop / Restart")
+    pdf.body_text("    sudo systemctl start ulfweb")
+    pdf.body_text("    sudo systemctl stop ulfweb")
+    pdf.body_text("    sudo systemctl restart ulfweb")
+    pdf.body_text(
+        "The same commands work for ulfweb-caddy. Restarting ulfweb does "
+        "not automatically restart ulfweb-caddy."
+    )
+
+    pdf.subsection_title("View Logs")
+    pdf.body_text("    sudo journalctl -u ulfweb -f          # follow live logs")
+    pdf.body_text("    sudo journalctl -u ulfweb --no-pager -n 50   # last 50 lines")
+    pdf.body_text("    sudo journalctl -u ulfweb-caddy -f    # Caddy logs")
+
+    pdf.subsection_title("Disable Auto-Start")
+    pdf.body_text(
+        "To prevent a service from starting on boot without removing it:"
+    )
+    pdf.body_text("    sudo systemctl disable ulfweb")
+    pdf.body_text("    sudo systemctl disable ulfweb-caddy")
+
+    pdf.section_title("Starting Manually (Development)")
+    pdf.body_text(
+        "For development, stop the systemd service and run the server "
+        "manually with the --reload flag for auto-reload on file changes:"
+    )
+    pdf.body_text("    sudo systemctl stop ulfweb")
     pdf.body_text("    source .venv/bin/activate")
-    pdf.body_text("    python3 -m backend.main")
+    pdf.body_text("    python3 -m backend.main --reload")
     pdf.body_text(
         "The server listens on the configured host and port (default: "
         "http://0.0.0.0:8000). If the port is already in use:"
@@ -1233,15 +1376,15 @@ def generate_admin_manual():
     pdf.body_text(
         "The SQLite database is stored at the configured path (default: "
         "data/ulfweb.db). Schema migrations are applied automatically on "
-        "startup. To back up the database:"
+        "startup. Backups are handled automatically by the backup system "
+        "(see chapter 9). You can also create manual backups from the "
+        "admin panel's Backups button at any time."
     )
-    pdf.bullet("Stop the application")
-    pdf.bullet("Copy data/ulfweb.db and data/encryption.key to a secure location")
-    pdf.bullet("Restart the application")
 
     pdf.note_box(
-        "If encryption is enabled, backing up the database alone is not "
-        "sufficient. You must also back up the encryption key file."
+        "If encryption is enabled, the encryption key is included in "
+        "backups automatically. Never delete the encryption key without "
+        "ensuring you have a recent backup."
     )
 
     pdf.section_title("Common Issues")
@@ -1286,6 +1429,7 @@ def generate_admin_manual():
     pdf.bold_bullet("data/encryption.key", "Database and file encryption key")
     pdf.bold_bullet("data/vault/", "Encrypted vault files (documents, images)")
     pdf.bold_bullet("data/uploads/", "Document collection files")
+    pdf.bold_bullet("data/backups/", "Automatic daily backup archives")
     pdf.bold_bullet("data/logs/", "Server process log files")
 
     pdf.section_title("Log Files")

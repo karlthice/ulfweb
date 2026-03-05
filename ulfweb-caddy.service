@@ -1,0 +1,16 @@
+[Unit]
+Description=ULF Web - Caddy HTTPS Reverse Proxy
+After=ulfweb.service
+Wants=ulfweb.service
+
+[Service]
+Type=simple
+User=__USER__
+WorkingDirectory=__INSTALL_DIR__
+ExecStart=__CADDY_BIN__ run --config __INSTALL_DIR__/Caddyfile
+Restart=on-failure
+RestartSec=5
+AmbientCapabilities=CAP_NET_BIND_SERVICE
+
+[Install]
+WantedBy=multi-user.target

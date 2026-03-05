@@ -364,7 +364,61 @@ else
     ok "Self-signed TLS certificate generated (valid for 10 years)"
 fi
 
-# ── 8. Final Summary ───────────────────────────────────────────────────────
+# ── 8. Systemd Services ───────────────────────────────────────────────────
+header "Systemd Services (Auto-Start on Boot)"
+
+SKIP_SYSTEMD=false
+
+if [ "$OS" = "macos" ]; then
+    info "macOS detected — skipping systemd setup (not supported)."
+    info "Use 'python3 -m backend.main' to start ULF Web manually."
+    SKIP_SYSTEMD=true
+elif $IS_WSL; then
+    info "WSL2 detected — skipping systemd setup (not typically available)."
+    info "Use 'python3 -m backend.main' to start ULF Web manually."
+    SKIP_SYSTEMD=true
+elif ! command -v systemctl &>/dev/null; then
+    info "systemctl not found — skipping systemd setup."
+    SKIP_SYSTEMD=true
+fi
+
+if ! $SKIP_SYSTEMD; then
+    # Fill in placeholders and install ulfweb.service
+    info "Installing ulfweb.service..."
+    sed -e "s|__USER__|$(whoami)|g" \
+        -e "s|__INSTALL_DIR__|$SCRIPT_DIR|g" \
+        ulfweb.service > /tmp/ulfweb.service
+    sudo cp /tmp/ulfweb.service /etc/systemd/system/ulfweb.service
+    rm /tmp/ulfweb.service
+    ok "ulfweb.service installed"
+
+    # Fill in placeholders and install ulfweb-caddy.service (if Caddy is available)
+    if command -v caddy &>/dev/null; then
+        CADDY_BIN_PATH="$(which caddy)"
+        info "Installing ulfweb-caddy.service..."
+        sed -e "s|__USER__|$(whoami)|g" \
+            -e "s|__INSTALL_DIR__|$SCRIPT_DIR|g" \
+            -e "s|__CADDY_BIN__|$CADDY_BIN_PATH|g" \
+            ulfweb-caddy.service > /tmp/ulfweb-caddy.service
+        sudo cp /tmp/ulfweb-caddy.service /etc/systemd/system/ulfweb-caddy.service
+        rm /tmp/ulfweb-caddy.service
+        ok "ulfweb-caddy.service installed"
+    fi
+
+    sudo systemctl daemon-reload
+
+    sudo systemctl enable ulfweb.service
+    sudo systemctl start ulfweb.service
+    ok "ulfweb.service enabled and started"
+
+    if command -v caddy &>/dev/null; then
+        sudo systemctl enable ulfweb-caddy.service
+        sudo systemctl start ulfweb-caddy.service
+        ok "ulfweb-caddy.service enabled and started"
+    fi
+fi
+
+# ── 9. Final Summary ───────────────────────────────────────────────────────
 header "Installation Complete"
 
 echo ""
@@ -389,28 +443,60 @@ if command -v caddy &>/dev/null; then
     echo "    Caddy:        $(caddy version 2>/dev/null | head -1)"
 fi
 echo ""
-echo "  Next steps:"
-echo ""
-echo "    1. Download a GGUF model into the models/ directory."
-echo "       Example (Qwen3 4B):"
-echo "         wget -P models/ https://huggingface.co/Qwen/Qwen3-4B-GGUF/resolve/main/qwen3-4b-q4_k_m.gguf"
-echo ""
-echo "    2. Start ULF Web:"
-echo "         source .venv/bin/activate"
-echo "         python3 -m backend.main"
-echo ""
-if command -v caddy &>/dev/null; then
-    echo "    3. Start Caddy for HTTPS (in a separate terminal):"
-    echo "         caddy run --config Caddyfile"
-    echo ""
-    echo "    4. Open https://localhost in your browser."
-    if [ -n "${LAN_IP:-}" ]; then
-        echo "       LAN access: https://$LAN_IP"
+if ! $SKIP_SYSTEMD; then
+    echo "  Systemd services:"
+    echo "    ulfweb.service         enabled and started"
+    if command -v caddy &>/dev/null; then
+        echo "    ulfweb-caddy.service   enabled and started"
     fi
-    echo "       (Accept the self-signed certificate warning on first visit)"
-    echo "       HTTPS is required for microphone access (dictation) over LAN."
+    echo ""
+    echo "  Next steps:"
+    echo ""
+    echo "    1. Download a GGUF model into the models/ directory."
+    echo "       Example (Qwen3 4B):"
+    echo "         wget -P models/ https://huggingface.co/Qwen/Qwen3-4B-GGUF/resolve/main/qwen3-4b-q4_k_m.gguf"
+    echo ""
+    if command -v caddy &>/dev/null; then
+        echo "    2. Open https://localhost in your browser."
+        if [ -n "${LAN_IP:-}" ]; then
+            echo "       LAN access: https://$LAN_IP"
+        fi
+        echo "       (Accept the self-signed certificate warning on first visit)"
+        echo "       HTTPS is required for microphone access (dictation) over LAN."
+    else
+        echo "    2. Open http://localhost:8000 in your browser."
+    fi
+    echo "       Default login: admin / admin"
+    echo ""
+    echo "  Manage services:"
+    echo "    sudo systemctl status ulfweb          # check status"
+    echo "    sudo systemctl restart ulfweb         # restart backend"
+    echo "    sudo journalctl -u ulfweb -f          # follow logs"
+    echo ""
 else
-    echo "    3. Open http://localhost:8000 in your browser."
+    echo "  Next steps:"
+    echo ""
+    echo "    1. Download a GGUF model into the models/ directory."
+    echo "       Example (Qwen3 4B):"
+    echo "         wget -P models/ https://huggingface.co/Qwen/Qwen3-4B-GGUF/resolve/main/qwen3-4b-q4_k_m.gguf"
+    echo ""
+    echo "    2. Start ULF Web:"
+    echo "         source .venv/bin/activate"
+    echo "         python3 -m backend.main"
+    echo ""
+    if command -v caddy &>/dev/null; then
+        echo "    3. Start Caddy for HTTPS (in a separate terminal):"
+        echo "         caddy run --config Caddyfile"
+        echo ""
+        echo "    4. Open https://localhost in your browser."
+        if [ -n "${LAN_IP:-}" ]; then
+            echo "       LAN access: https://$LAN_IP"
+        fi
+        echo "       (Accept the self-signed certificate warning on first visit)"
+        echo "       HTTPS is required for microphone access (dictation) over LAN."
+    else
+        echo "    3. Open http://localhost:8000 in your browser."
+    fi
+    echo "       Default login: admin / admin"
+    echo ""
 fi
-echo "       Default login: admin / admin"
-echo ""

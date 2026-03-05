@@ -52,6 +52,9 @@ window.currentUser = null;
     // Hide admin-only controls for non-admin users
     applyUserPermissions();
 
+    // Check backup health (non-blocking)
+    checkBackupHealth();
+
     console.log('ulfweb initialized');
 })();
 
@@ -242,4 +245,27 @@ function setupMobileSidebar() {
             overlay.classList.remove('visible');
         }
     });
+}
+
+/**
+ * Check backup health and show warning banner if backups are failing.
+ */
+async function checkBackupHealth() {
+    try {
+        const resp = await fetch(`${API_BASE}/admin/backups/health`);
+        if (!resp.ok) return;
+        const data = await resp.json();
+        if (!data.ok) {
+            const banner = document.getElementById('backup-failure-banner');
+            const detail = document.getElementById('backup-failure-detail');
+            if (banner) {
+                banner.classList.remove('hidden');
+                if (detail && data.last_error) {
+                    detail.textContent = data.last_error;
+                }
+            }
+        }
+    } catch (e) {
+        // Silently ignore — endpoint may not be available
+    }
 }

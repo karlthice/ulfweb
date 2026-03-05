@@ -31,6 +31,7 @@ const admin = {
         }
 
         this.setupEventListeners();
+        this.checkBackupHealth();
         this.loadModels();
         this.loadServers();
         this.loadCollections();
@@ -109,6 +110,8 @@ const admin = {
                 this.closeActivityLogModal();
                 this.closeModal('usage-modal');
                 this.closeModal('file-info-modal');
+                this.closeModal('backups-modal');
+                this.closeModal('restore-confirm-modal');
             }
         });
 
@@ -215,6 +218,21 @@ const admin = {
         document.getElementById('close-set-password-modal').addEventListener('click', () => this.closeModal('set-password-modal'));
         document.getElementById('set-password-modal-overlay').addEventListener('click', () => this.closeModal('set-password-modal'));
         document.getElementById('save-set-password-btn').addEventListener('click', () => this.saveSetPassword());
+
+        // Backups
+        document.getElementById('backups-btn').addEventListener('click', () => this.openBackupsModal());
+        document.getElementById('close-backups-modal').addEventListener('click', () => this.closeModal('backups-modal'));
+        document.getElementById('backups-modal-overlay').addEventListener('click', () => this.closeModal('backups-modal'));
+        document.getElementById('create-backup-btn').addEventListener('click', () => this.createBackup());
+        document.getElementById('backup-scan-btn').addEventListener('click', () => {
+            const dir = document.getElementById('backup-scan-dir').value.trim();
+            this.loadBackups(dir || undefined);
+        });
+
+        // Restore confirmation
+        document.getElementById('close-restore-confirm-modal').addEventListener('click', () => this.closeModal('restore-confirm-modal'));
+        document.getElementById('restore-confirm-modal-overlay').addEventListener('click', () => this.closeModal('restore-confirm-modal'));
+        document.getElementById('confirm-restore-btn').addEventListener('click', () => this.executeRestore());
     },
 
     closeModal(id) {
@@ -1548,6 +1566,159 @@ const admin = {
         } catch (e) {
             console.error('Failed to load file info:', e);
             container.innerHTML = '<p class="setting-hint">Failed to load file information.</p>';
+        }
+    },
+
+    // --- Backup Management ---
+
+    async checkBackupHealth() {
+        try {
+            const resp = await fetch(`${API_BASE}/admin/backups/health`);
+            if (!resp.ok) return;
+            const data = await resp.json();
+            if (!data.ok) {
+                const banner = document.getElementById('backup-failure-banner');
+                const detail = document.getElementById('backup-failure-detail');
+                if (banner) {
+                    banner.classList.remove('hidden');
+                    if (detail && data.last_error) {
+                        detail.textContent = data.last_error;
+                    }
+                }
+            }
+        } catch (e) {
+            // Silently ignore
+        }
+    },
+
+    openBackupsModal() {
+        document.getElementById('backups-modal').classList.remove('hidden');
+        this.loadBackups();
+    },
+
+    async loadBackups(scanDir) {
+        const tbody = document.getElementById('backups-tbody');
+        tbody.innerHTML = '<tr><td colspan="4" class="activity-log-empty">Loading...</td></tr>';
+
+        try {
+            let url = `${API_BASE}/admin/backups/list`;
+            if (scanDir) url += `?directory=${encodeURIComponent(scanDir)}`;
+            const resp = await fetch(url);
+            if (!resp.ok) throw new Error('Failed to load backups');
+            const data = await resp.json();
+
+            if (!data.backups || data.backups.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="4" class="activity-log-empty">No backups found</td></tr>';
+                return;
+            }
+
+            tbody.innerHTML = data.backups.map(b => {
+                const sizeMB = (b.size / 1024 / 1024).toFixed(1);
+                const date = new Date(b.modified).toLocaleString();
+                const escapedPath = this.escapeHtml(b.path);
+                const escapedName = this.escapeHtml(b.filename);
+                return `<tr>
+                    <td class="fileinfo-name">${escapedName}</td>
+                    <td class="fileinfo-size">${sizeMB} MB</td>
+                    <td class="fileinfo-date">${date}</td>
+                    <td>
+                        <button class="action-btn" onclick="admin.confirmRestore('${escapedPath}', '${escapedName}', '${sizeMB} MB')">Restore</button>
+                        <button class="action-btn delete-btn" onclick="admin.deleteBackup('${escapedPath}', '${escapedName}')">Delete</button>
+                    </td>
+                </tr>`;
+            }).join('');
+        } catch (e) {
+            console.error('Failed to load backups:', e);
+            tbody.innerHTML = '<tr><td colspan="4" class="activity-log-empty">Failed to load backups</td></tr>';
+        }
+    },
+
+    async createBackup() {
+        const btn = document.getElementById('create-backup-btn');
+        const progress = document.getElementById('backup-progress');
+        const destination = document.getElementById('backup-destination').value.trim() || null;
+
+        btn.disabled = true;
+        progress.classList.remove('hidden');
+
+        try {
+            const resp = await fetch(`${API_BASE}/admin/backups/create`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ destination }),
+            });
+            if (!resp.ok) {
+                const err = await resp.json();
+                throw new Error(err.detail || 'Backup failed');
+            }
+            const result = await resp.json();
+            alert(`Backup created: ${result.filename} (${(result.size / 1024 / 1024).toFixed(1)} MB)`);
+            this.loadBackups();
+        } catch (e) {
+            alert('Backup failed: ' + e.message);
+        } finally {
+            btn.disabled = false;
+            progress.classList.add('hidden');
+        }
+    },
+
+    confirmRestore(path, filename, size) {
+        document.getElementById('restore-path').value = path;
+        document.getElementById('restore-filename').textContent = filename;
+        document.getElementById('restore-size').textContent = size;
+        document.getElementById('restore-confirm-modal').classList.remove('hidden');
+    },
+
+    async executeRestore() {
+        const path = document.getElementById('restore-path').value;
+        const btn = document.getElementById('confirm-restore-btn');
+        btn.disabled = true;
+        btn.textContent = 'Restoring...';
+
+        try {
+            await fetch(`${API_BASE}/admin/backups/restore`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ backup_path: path }),
+            });
+        } catch (e) {
+            // Expected — server is restarting
+        }
+
+        this.closeModal('restore-confirm-modal');
+        this.closeModal('backups-modal');
+
+        // Poll /health until the server is back up
+        const pollHealth = () => {
+            setTimeout(async () => {
+                try {
+                    const response = await fetch('/health');
+                    if (response.ok) {
+                        window.location.reload();
+                        return;
+                    }
+                } catch (e) {
+                    // Server still down
+                }
+                pollHealth();
+            }, 1000);
+        };
+        pollHealth();
+    },
+
+    async deleteBackup(path, filename) {
+        if (!confirm(`Delete backup "${filename}"?`)) return;
+        try {
+            const resp = await fetch(`${API_BASE}/admin/backups/delete?backup_path=${encodeURIComponent(path)}`, {
+                method: 'DELETE',
+            });
+            if (!resp.ok) {
+                const err = await resp.json();
+                throw new Error(err.detail || 'Delete failed');
+            }
+            this.loadBackups();
+        } catch (e) {
+            alert('Delete failed: ' + e.message);
         }
     }
 };

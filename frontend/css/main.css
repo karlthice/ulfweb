@@ -2520,3 +2520,16 @@ html, body {
     font-size: 0.8rem;
     color: var(--text-muted);
 }
+
+/* Backup failure banner */
+.backup-failure-banner {
+    background: #fef2f2;
+    color: #991b1b;
+    border-bottom: 2px solid #fca5a5;
+    padding: 0.5rem 1rem;
+    font-size: 0.9rem;
+    text-align: center;
+    font-weight: 500;
+    flex-shrink: 0;
+    width: 100%;
+}
