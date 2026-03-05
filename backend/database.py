@@ -316,6 +316,8 @@ async def init_database() -> None:
         db_ctx = aiosqlite.connect(db_path)
 
     async with db_ctx as db:
+        await db.execute("PRAGMA journal_mode=WAL")
+        await db.execute("PRAGMA busy_timeout=5000")
         await db.executescript(SCHEMA)
         await db.commit()
 
@@ -613,6 +615,8 @@ async def get_db() -> AsyncGenerator[aiosqlite.Connection, None]:
         db.row_factory = aiosqlite.Row
     # Override LOWER() to handle Unicode (SQLite built-in only handles ASCII)
     await db.create_function("LOWER", 1, lambda s: s.lower() if s else s)
+    await db.execute("PRAGMA journal_mode=WAL")
+    await db.execute("PRAGMA busy_timeout=5000")
     try:
         yield db
     finally:
