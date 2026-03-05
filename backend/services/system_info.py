@@ -2,22 +2,21 @@
 
 import glob
 import os
+import platform
 import shutil
 import subprocess
 
+_IS_MACOS = platform.system() == "Darwin"
 
-def get_system_ram() -> dict:
-    """Read /proc/meminfo for system RAM stats.
 
-    Returns dict with total, used, available in bytes.
-    """
+def _get_system_ram_linux() -> dict:
+    """Read /proc/meminfo for system RAM stats."""
     try:
         info = {}
         with open("/proc/meminfo") as f:
             for line in f:
                 parts = line.split()
                 if parts[0] in ("MemTotal:", "MemFree:", "MemAvailable:"):
-                    # Values in /proc/meminfo are in kB
                     info[parts[0].rstrip(":")] = int(parts[1]) * 1024
 
         total = info.get("MemTotal", 0)
@@ -29,6 +28,53 @@ def get_system_ram() -> dict:
         }
     except Exception:
         return {"total": 0, "used": 0, "available": 0}
+
+
+def _get_system_ram_macos() -> dict:
+    """Read system RAM via sysctl and vm_stat on macOS."""
+    try:
+        # Total RAM
+        result = subprocess.run(
+            ["sysctl", "-n", "hw.memsize"],
+            capture_output=True, text=True, timeout=5,
+        )
+        total = int(result.stdout.strip())
+
+        # Parse vm_stat for page-level usage
+        result = subprocess.run(
+            ["vm_stat"],
+            capture_output=True, text=True, timeout=5,
+        )
+        pages = {}
+        page_size = 16384  # default
+        for line in result.stdout.splitlines():
+            if "page size of" in line:
+                page_size = int(line.split()[-2])
+            elif ":" in line:
+                key, _, val = line.partition(":")
+                val = val.strip().rstrip(".")
+                if val.isdigit():
+                    pages[key.strip()] = int(val)
+
+        free_pages = pages.get("Pages free", 0)
+        inactive_pages = pages.get("Pages inactive", 0)
+        speculative_pages = pages.get("Pages speculative", 0)
+        available = (free_pages + inactive_pages + speculative_pages) * page_size
+
+        return {
+            "total": total,
+            "used": total - available,
+            "available": available,
+        }
+    except Exception:
+        return {"total": 0, "used": 0, "available": 0}
+
+
+def get_system_ram() -> dict:
+    """Get system RAM stats. Returns dict with total, used, available in bytes."""
+    if _IS_MACOS:
+        return _get_system_ram_macos()
+    return _get_system_ram_linux()
 
 
 def _get_gpu_vram_amd() -> dict | None:
@@ -82,12 +128,41 @@ def _get_gpu_vram_nvidia() -> dict | None:
         return None
 
 
+def _get_gpu_vram_apple() -> dict | None:
+    """Report Apple Silicon unified memory as GPU memory.
+
+    Apple Silicon uses shared unified memory for both CPU and GPU (Metal).
+    We report total system RAM as GPU capacity since Metal can use all of it.
+    """
+    if not _IS_MACOS:
+        return None
+    try:
+        result = subprocess.run(
+            ["sysctl", "-n", "hw.memsize"],
+            capture_output=True, text=True, timeout=5,
+        )
+        if result.returncode != 0:
+            return None
+
+        total = int(result.stdout.strip())
+        ram = get_system_ram()
+
+        return {
+            "total": total,
+            "used": ram["used"],
+            "free": ram["available"],
+            "vendor": "apple",
+        }
+    except Exception:
+        return None
+
+
 def get_gpu_vram() -> dict | None:
-    """Detect GPU VRAM (AMD or NVIDIA).
+    """Detect GPU VRAM (AMD, NVIDIA, or Apple Silicon).
 
     Returns dict with total, used, free in bytes, or None if no GPU found.
     """
-    return _get_gpu_vram_amd() or _get_gpu_vram_nvidia()
+    return _get_gpu_vram_amd() or _get_gpu_vram_nvidia() or _get_gpu_vram_apple()
 
 
 def _get_process_vram_nvidia(pid: int) -> int:
@@ -127,7 +202,6 @@ def _get_process_vram_amd(pid: int) -> tuple[int, int]:
                     found_drm = False
                     for line in f:
                         if line.startswith("drm-total-vram:"):
-                            # Value is in KiB
                             val = int(line.split()[1])
                             if val > vram_bytes:
                                 vram_bytes = val
@@ -144,27 +218,51 @@ def _get_process_vram_amd(pid: int) -> tuple[int, int]:
     except (PermissionError, OSError):
         pass
 
-    # Convert KiB to bytes
     return vram_bytes * 1024, gtt_bytes * 1024
+
+
+def _get_process_ram_macos(pid: int) -> int:
+    """Get RSS for a process on macOS via ps."""
+    try:
+        result = subprocess.run(
+            ["ps", "-o", "rss=", "-p", str(pid)],
+            capture_output=True, text=True, timeout=5,
+        )
+        if result.returncode != 0:
+            return 0
+        return int(result.stdout.strip()) * 1024  # kB -> bytes
+    except Exception:
+        return 0
 
 
 def get_process_memory(pid: int) -> dict | None:
     """Get RAM and VRAM usage for a specific process.
 
-    Reads VmRSS from /proc/{pid}/status for RAM.
-    Supports both AMD (fdinfo) and NVIDIA (nvidia-smi) GPUs.
+    Supports Linux (/proc), AMD (fdinfo), NVIDIA (nvidia-smi), and macOS (ps).
 
     Returns dict with ram_bytes, vram_bytes, gtt_bytes, or None if process not found.
     """
     try:
-        # Read RSS from /proc/{pid}/status
+        if _IS_MACOS:
+            ram_bytes = _get_process_ram_macos(pid)
+            if ram_bytes == 0:
+                return None
+            # On Apple Silicon, Metal GPU memory is part of unified RAM.
+            # Report process RSS as both RAM and VRAM usage.
+            return {
+                "ram_bytes": ram_bytes,
+                "vram_bytes": ram_bytes,
+                "gtt_bytes": 0,
+            }
+
+        # Linux: read RSS from /proc/{pid}/status
         ram_bytes = 0
         status_path = f"/proc/{pid}/status"
         with open(status_path) as f:
             for line in f:
                 if line.startswith("VmRSS:"):
                     parts = line.split()
-                    ram_bytes = int(parts[1]) * 1024  # kB -> bytes
+                    ram_bytes = int(parts[1]) * 1024
                     break
 
         # Try AMD first (no subprocess overhead), then NVIDIA
