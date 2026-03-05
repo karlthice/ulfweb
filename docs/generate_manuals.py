@@ -791,8 +791,9 @@ def generate_admin_manual():
     pdf.bold_bullet("path", "Path to the SQLite database file. Default: data/ulfweb.db")
 
     pdf.subsection_title("Model Settings")
-    pdf.bold_bullet("models.path", "Directory containing GGUF model files. "
-                    "The admin panel scans this directory for available models.")
+    pdf.bold_bullet("models.path", "One or more directories containing GGUF model files, "
+                    "separated by commas. The admin panel scans all listed directories "
+                    "for available models. Example: \"models/,/opt/llama.cpp/models\"")
     pdf.bold_bullet("models.llama_server", "Path to the llama-server executable")
 
     pdf.subsection_title("Encryption Settings")
