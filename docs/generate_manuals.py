@@ -644,6 +644,7 @@ def generate_admin_manual():
         (8, "Monitoring & Analytics"),
         (9, "Backup & Restore"),
         (10, "Maintenance & Troubleshooting"),
+        (11, "Software Updates"),
     ]
     pdf.toc_page(toc)
 
@@ -1277,35 +1278,13 @@ def generate_admin_manual():
         "backup outside the default location."
     )
 
-    pdf.section_title("Backing Up to USB Drive")
+    pdf.section_title("Backup to USB Drive")
     pdf.body_text(
-        "ULF Web supports backing up directly to a USB drive. To back up "
-        "to USB:"
-    )
-    pdf.body_text(
-        "1. Insert a USB drive into the server. The drive must be formatted "
-        "as exFAT (recommended) or FAT32. Do not use ext4 or other Linux "
-        "filesystems, as they will mount with root-only write permissions "
-        "and the backup will fail."
-    )
-    pdf.body_text(
-        "2. In the Backups dialog, click Scan for Media. ULF Web will "
-        "detect all mounted removable drives."
-    )
-    pdf.body_text(
-        "3. Click on the desired drive from the list. The drive path will "
-        "be set as the backup destination and any existing backups on the "
-        "drive will be listed."
-    )
-    pdf.body_text(
-        "4. Click Create Backup Now. The backup archive will be written "
-        "directly to the selected USB drive."
-    )
-    pdf.note_box(
-        "USB drives must be formatted as exFAT or FAT32. Drives formatted "
-        "with ext4 or other Linux filesystems mount as root-owned and are "
-        "not writable by ULF Web. If a backup fails with a permission "
-        "error, reformat the USB drive as exFAT."
+        "To back up directly to a USB drive, insert the drive and enter its "
+        "mount path in the destination field (e.g. /media/username/UlfUSB). "
+        "ULF Web will create the backup archive directly on the USB drive. "
+        "This is the recommended way to create off-site backups for disaster "
+        "recovery."
     )
 
     pdf.section_title("What Gets Backed Up")
@@ -1322,10 +1301,11 @@ def generate_admin_manual():
 
     pdf.section_title("Browsing External Backups")
     pdf.body_text(
-        "To browse backups on a USB drive, click Scan for Media and select "
-        "the drive. Any existing ULF Web backup archives on the drive will "
-        "be listed. You can also enter a directory path manually in the "
-        "Scan field and click Scan to browse backups at any location."
+        "To browse backups on a USB drive or network share, enter the "
+        "directory path in the Scan field and click Scan. The backup list "
+        "will show all ULF Web backup archives found in that directory. "
+        "For USB drives, the mount path is typically /media/<username>/<drive-label> "
+        "on Linux systems."
     )
 
     pdf.section_title("Restoring from a Backup")
@@ -1469,6 +1449,105 @@ def generate_admin_manual():
         "llama.cpp server logs are stored in data/logs/ and can be viewed "
         "from the admin panel. Application logs are output to the console "
         "(stdout/stderr) by the uvicorn server."
+    )
+
+    # Chapter 11: Software Updates
+    pdf.chapter_title(11, "Software Updates")
+
+    pdf.body_text(
+        "ULF Web supports offline software updates via USB drive. Update "
+        "packages contain new application code and are applied from the "
+        "admin panel without requiring internet access. The update system "
+        "also supports importing new AI models from USB."
+    )
+
+    pdf.section_title("Update Packages")
+    pdf.body_text(
+        "Update packages are tar.gz archives named ulfweb-update-v<version>.tar.gz "
+        "(e.g. ulfweb-update-v1.0.1.tar.gz). Each package contains:"
+    )
+    pdf.bold_bullet("manifest.json", "Version number, date, and description of the update")
+    pdf.bold_bullet("code/", "Updated application files (backend, frontend, scripts, docs, etc.)")
+    pdf.body_text(
+        "Update packages are prepared by the development team and distributed "
+        "on USB drives for deployment to offline systems."
+    )
+
+    pdf.section_title("Applying a Code Update")
+    pdf.body_text(
+        "To apply a software update:"
+    )
+    pdf.bullet("Copy the ulfweb-update-v*.tar.gz file to a USB drive")
+    pdf.bullet("Insert the USB drive into the ULF Web server")
+    pdf.bullet("Open the admin panel and click Software Updates in the header")
+    pdf.bullet("Click Scan for USB Drives \u2014 the system scans /media/ and "
+               "/run/media/ for mounted drives")
+    pdf.bullet("Select the USB drive from the list \u2014 ULF Web scans it for "
+               "update packages and model files")
+    pdf.bullet("Review the package details (version, date, description) and "
+               "click Apply to install the update")
+
+    pdf.section_title("What Happens During an Update")
+    pdf.body_text("When you apply an update, ULF Web performs the following steps:")
+    pdf.bullet("Validates the package (checks manifest, verifies no unsafe file paths)")
+    pdf.bullet("Creates an automatic pre-update backup (stored in data/backups/)")
+    pdf.bullet("Extracts the update into a staging directory")
+    pdf.bullet("Swaps updated files into place (backend, frontend, scripts, docs, "
+               "requirements.txt, VERSION, service files)")
+    pdf.bullet("Runs pip install to update Python dependencies if needed")
+    pdf.bullet("Cleans up staging files")
+    pdf.bullet("Restarts the application automatically")
+    pdf.body_text(
+        "If the file swap fails partway through, ULF Web automatically rolls "
+        "back all changes by restoring the original files."
+    )
+
+    pdf.section_title("Protected Items")
+    pdf.body_text(
+        "The following items are never modified during an update, ensuring "
+        "your local configuration and data are preserved:"
+    )
+    pdf.bold_bullet("config.yaml", "Your server and LLM configuration")
+    pdf.bold_bullet("data/", "Database, backups, uploads, vault files, and encryption key")
+    pdf.bold_bullet(".venv/", "Python virtual environment (updated via pip if needed)")
+    pdf.bold_bullet("models/", "Downloaded AI model files")
+    pdf.bold_bullet("CLAUDE.md", "Project-specific development notes")
+
+    pdf.section_title("Importing AI Models from USB")
+    pdf.body_text(
+        "New AI models (.gguf files) can be imported from a USB drive without "
+        "manual file copying. To import a model:"
+    )
+    pdf.bullet("Place .gguf model files in a models/ directory on the USB drive")
+    pdf.bullet("Open Software Updates and scan the USB drive")
+    pdf.bullet("The Models section lists all .gguf files found on the drive")
+    pdf.bullet("Click Import next to the desired model to copy it to the "
+               "server\u2019s configured models directory")
+    pdf.note_box(
+        "Model files can be very large (several gigabytes). Ensure the "
+        "server has sufficient disk space before importing. The import "
+        "will fail if a model with the same filename already exists."
+    )
+
+    pdf.section_title("Checking the Current Version")
+    pdf.body_text(
+        "The current application version is displayed in the admin panel "
+        "header. It is read from the VERSION file in the project root. "
+        "You can also check it programmatically:"
+    )
+    pdf.body_text("    curl http://localhost:8000/api/v1/admin/updates/version")
+
+    pdf.section_title("Rollback After a Failed Update")
+    pdf.body_text(
+        "If an update causes problems, you can restore the pre-update backup "
+        "from the Backups section of the admin panel. Each update automatically "
+        "creates a backup before making any changes, so you can always return "
+        "to the previous state."
+    )
+    pdf.note_box(
+        "Always verify that the system is working correctly after applying "
+        "an update. Check that the admin panel loads, chat functions work, "
+        "and any configured AI servers are still accessible."
     )
 
     output_path = os.path.join(OUTPUT_DIR, "UlfWeb_Admin_Manual.pdf")

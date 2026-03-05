@@ -12,7 +12,6 @@ from backend.auth import get_client_ip, require_admin
 from backend.services.backup_service import backup_service
 from backend.services.llama_manager import llama_manager
 from backend.services.storage import log_activity
-from backend.services.update_service import update_service
 
 logger = logging.getLogger("ulfweb")
 
@@ -36,14 +35,6 @@ async def backup_health():
 
 
 # --- Admin endpoints ---
-
-@router.get("/scan-media")
-async def scan_media(request: Request):
-    """Scan for mounted USB / removable media."""
-    await require_admin(request)
-    drives = update_service.scan_media_mounts()
-    return {"drives": drives}
-
 
 @router.get("/list")
 async def list_backups(request: Request, directory: Optional[str] = None):

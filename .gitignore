@@ -25,6 +25,9 @@ playwright-report/
 # Generated screenshots
 docs/screenshots/
 
+# Release artifacts
+*.tar.gz
+
 # OS
 .DS_Store
 

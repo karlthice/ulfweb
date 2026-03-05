@@ -237,7 +237,6 @@ const admin = {
         document.getElementById('close-backups-modal').addEventListener('click', () => this.closeModal('backups-modal'));
         document.getElementById('backups-modal-overlay').addEventListener('click', () => this.closeModal('backups-modal'));
         document.getElementById('create-backup-btn').addEventListener('click', () => this.createBackup());
-        document.getElementById('backup-scan-media-btn').addEventListener('click', () => this.scanBackupMedia());
         document.getElementById('backup-scan-btn').addEventListener('click', () => {
             const dir = document.getElementById('backup-scan-dir').value.trim();
             this.loadBackups(dir || undefined);
@@ -1607,8 +1606,6 @@ const admin = {
 
     openBackupsModal() {
         document.getElementById('backups-modal').classList.remove('hidden');
-        document.getElementById('backup-drives-section').classList.add('hidden');
-        document.getElementById('backup-scan-media-status').textContent = '';
         this.loadBackups();
     },
 
@@ -1736,54 +1733,6 @@ const admin = {
         } catch (e) {
             alert('Delete failed: ' + e.message);
         }
-    },
-
-    async scanBackupMedia() {
-        const btn = document.getElementById('backup-scan-media-btn');
-        const status = document.getElementById('backup-scan-media-status');
-        btn.disabled = true;
-        status.textContent = 'Scanning...';
-
-        try {
-            const resp = await fetch(`${API_BASE}/admin/backups/scan-media`);
-            if (!resp.ok) throw new Error('Failed to scan for media');
-            const data = await resp.json();
-
-            const section = document.getElementById('backup-drives-section');
-            const list = document.getElementById('backup-drives-list');
-
-            if (!data.drives || data.drives.length === 0) {
-                list.innerHTML = '<p style="color: var(--text-muted); font-style: italic;">No removable media found. Make sure a USB drive is plugged in and mounted.</p>';
-                section.classList.remove('hidden');
-                status.textContent = 'No media found';
-                return;
-            }
-
-            list.innerHTML = data.drives.map(d => {
-                const escapedPath = this.escapeHtml(d.path);
-                const escapedName = this.escapeHtml(d.name);
-                return `<div class="updates-drive-item" onclick="admin.selectBackupDrive('${escapedPath}')">
-                    <div>
-                        <div class="updates-drive-name">${escapedName}</div>
-                        <div class="updates-drive-path">${escapedPath}</div>
-                    </div>
-                    <span class="updates-drive-arrow">&rarr;</span>
-                </div>`;
-            }).join('');
-
-            section.classList.remove('hidden');
-            status.textContent = `${data.drives.length} drive(s) found`;
-        } catch (e) {
-            status.textContent = 'Scan failed: ' + e.message;
-        } finally {
-            btn.disabled = false;
-        }
-    },
-
-    selectBackupDrive(drivePath) {
-        document.getElementById('backup-destination').value = drivePath;
-        document.getElementById('backup-scan-dir').value = drivePath;
-        this.loadBackups(drivePath);
     },
 
     // --- Updates ---
