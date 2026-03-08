@@ -204,7 +204,7 @@ def generate_user_manual():
     pdf.chapter_title(1, "Introduction")
     pdf.body_text(
         "ULF Web is a private, self-hosted chat application that provides a web interface "
-        "to local large language models (LLMs) running via llama.cpp. It runs entirely "
+        "to local large language models (LLMs) running via llama.cpp or vLLM. It runs entirely "
         "offline on your local network \u2014 no data ever leaves your machine."
     )
     pdf.body_text(
@@ -520,10 +520,16 @@ def generate_user_manual():
     )
 
     pdf.section_title("Exporting Cases")
-    pdf.body_text("Cases can be exported in two formats:")
+    pdf.body_text("Cases can be exported in three formats:")
     pdf.bold_bullet("PDF Export", "Generates a formatted PDF document containing "
                     "the case metadata, description, AI summary, and all records "
                     "with embedded images and documents.")
+    pdf.bold_bullet("Export Redacted PDF", "Generates a PDF with personally identifiable "
+                    "information (PII) automatically scrubbed. The case name, identifier, "
+                    "email addresses, phone numbers, Icelandic national IDs (kennitala), "
+                    "street addresses, postal codes, company names, dates, and other PII "
+                    "are replaced with placeholders (e.g., {{KENNITALA}}, {{ADDRESS}}). "
+                    "Images and document attachments are excluded entirely.")
     pdf.bold_bullet("JSON Export", "Exports the case data as a JSON file containing "
                     "all text content, metadata, and timestamps for programmatic use.")
 
@@ -652,8 +658,9 @@ def generate_admin_manual():
     pdf.chapter_title(1, "Introduction")
     pdf.body_text(
         "This manual covers the administration of ULF Web, a self-hosted AI "
-        "chat platform that runs entirely offline using llama.cpp as its LLM "
-        "backend. As an administrator, you are responsible for managing LLM "
+        "chat platform that runs entirely offline. ULF Web supports two LLM "
+        "backends: llama.cpp (GGUF models) and vLLM (HuggingFace models). "
+        "As an administrator, you are responsible for managing LLM "
         "servers, user accounts, AI service assignments, document collections, "
         "and system monitoring."
     )
@@ -672,8 +679,8 @@ def generate_admin_manual():
                     "as static files. No build step required.")
     pdf.bold_bullet("SQLite/SQLCipher Database", "Stores all application data "
                     "with optional encryption at rest")
-    pdf.bold_bullet("llama.cpp Servers", "One or more LLM server processes, each "
-                    "loading a GGUF model file for inference")
+    pdf.bold_bullet("LLM Servers", "One or more server processes running either "
+                    "llama.cpp (GGUF models) or vLLM (HuggingFace models)")
     pdf.bold_bullet("Whisper", "Speech-to-text model for dictation features")
     pdf.bold_bullet("TTS Engine", "Text-to-speech for translation audio playback")
 
@@ -688,7 +695,8 @@ def generate_admin_manual():
     pdf.section_title("Prerequisites")
     pdf.bullet("Git (to clone the repository)")
     pdf.bullet("Internet access during installation (for packages and llama.cpp)")
-    pdf.bullet("GGUF model files for the LLMs you wish to use")
+    pdf.bullet("Model files: GGUF files for llama.cpp or HuggingFace model "
+               "directories for vLLM")
     pdf.bullet("Sufficient RAM/VRAM for your chosen models")
 
     pdf.section_title("Automated Installation (Recommended)")
@@ -805,6 +813,8 @@ def generate_admin_manual():
                     "separated by commas. The admin panel scans all listed directories "
                     "for available models. Example: \"models/,/opt/llama.cpp/models\"")
     pdf.bold_bullet("models.llama_server", "Path to the llama-server executable")
+    pdf.bold_bullet("models.vllm_server", "Path to the vllm executable. "
+                    "Default: \"vllm\" (uses PATH)")
 
     pdf.subsection_title("Encryption Settings")
     pdf.bold_bullet("encryption.enabled", "Enable encryption at rest (true/false). "
@@ -829,6 +839,7 @@ def generate_admin_manual():
         "using the ULFWEB_ prefix:"
     )
     pdf.bullet("ULFWEB_LLAMA_URL \u2014 Override the default LLM server URL")
+    pdf.bullet("ULFWEB_VLLM_SERVER \u2014 Override the vllm executable path")
     pdf.bullet("ULFWEB_DATABASE_PATH \u2014 Override the database file path")
     pdf.bullet("ULFWEB_SERVER_HOST \u2014 Override the bind address")
     pdf.bullet("ULFWEB_SERVER_PORT \u2014 Override the HTTP port")
@@ -864,10 +875,35 @@ def generate_admin_manual():
 
     pdf.section_title("Overview")
     pdf.body_text(
-        "ULF Web can manage multiple llama.cpp server instances, each running "
+        "ULF Web can manage multiple LLM server instances, each running "
         "a different model. This allows you to assign specialized models to "
         "different tasks (chat, translation, document analysis, etc.) and "
         "run them concurrently."
+    )
+
+    pdf.section_title("Choosing an LLM Backend")
+    pdf.body_text(
+        "The LLM Backend dropdown at the top of the Servers section is a "
+        "global setting that determines how all servers are started. "
+        "ULF Web supports two backends:"
+    )
+    pdf.bold_bullet("llama.cpp", "The default backend. Uses GGUF model files and "
+                    "the llama-server executable. Supports quantized models for "
+                    "efficient memory usage, parallel inference slots, flash "
+                    "attention, and quantized KV cache.")
+    pdf.bold_bullet("vLLM", "An alternative high-performance backend. Uses "
+                    "HuggingFace model directories (or GGUF files). Handles "
+                    "concurrency automatically and supports tensor parallelism "
+                    "for multi-GPU setups.")
+    pdf.body_text(
+        "When you switch backends, all running servers must be stopped and "
+        "restarted. The model dropdown in the server modal will show the "
+        "appropriate model types for the selected backend."
+    )
+    pdf.note_box(
+        "Both backends expose the same OpenAI-compatible API, so switching "
+        "between them does not affect the chat interface or other features. "
+        "The backend choice affects only process management and model format."
     )
 
     pdf.section_title("Adding a Server")
@@ -879,11 +915,14 @@ def generate_admin_manual():
                     "(e.g., \"Chat - Llama 3.1 8B\")")
     pdf.bold_bullet("URL", "The server URL and port. Leave empty for auto-assigned "
                     "port. If managing external servers, enter the full URL.")
-    pdf.bold_bullet("Model Path", "Select a GGUF model file from the dropdown. "
-                    "Models are scanned from the configured models directory.")
-    pdf.bold_bullet("Parallel Slots (1\u20134)", "Number of concurrent request slots. "
-                    "Higher values allow more simultaneous users but require more "
-                    "memory. Default: 1")
+    pdf.bold_bullet("Model Path", "Select a model from the dropdown. For llama.cpp, "
+                    "this shows GGUF files. For vLLM, this also shows HuggingFace "
+                    "model directories. Models are scanned from the configured "
+                    "models directory.")
+    pdf.bold_bullet("Parallel Slots (1\u20134)", "Number of concurrent request slots "
+                    "(llama.cpp only). Higher values allow more simultaneous users "
+                    "but require more memory. Default: 1. This setting is hidden "
+                    "when using vLLM, which handles concurrency automatically.")
     pdf.bold_bullet("Context Size", "Context window size in tokens. Options range "
                     "from 8K to 128K. Larger contexts require more memory. "
                     "Default: 32768")
@@ -895,7 +934,7 @@ def generate_admin_manual():
 
     pdf.section_title("Starting and Stopping Servers")
     pdf.body_text("Each server has three control buttons:")
-    pdf.bold_bullet("Start", "Launch the llama.cpp process with the configured "
+    pdf.bold_bullet("Start", "Launch the LLM server process with the configured "
                     "model and settings")
     pdf.bold_bullet("Stop", "Gracefully shut down the server process")
     pdf.bold_bullet("Restart", "Stop and restart the server (useful after "
@@ -1336,7 +1375,7 @@ def generate_admin_manual():
     pdf.body_text(
         "Click the Restart ULF Web button in the admin panel header to "
         "trigger a graceful application restart. This reloads the Python "
-        "backend via uvicorn. Running llama.cpp server processes are "
+        "backend via uvicorn. Running LLM server processes are "
         "cleaned up during shutdown."
     )
 
@@ -1406,7 +1445,7 @@ def generate_admin_manual():
     pdf.bullet("Verify the model file path is correct and the file exists")
     pdf.bullet("Ensure sufficient RAM/VRAM for the model and context size")
     pdf.bullet("Check for port conflicts with other services")
-    pdf.bullet("Verify the llama-server executable path in config.yaml")
+    pdf.bullet("Verify the llama-server (or vllm) executable path in config.yaml")
 
     pdf.subsection_title("Slow Responses")
     pdf.bullet("Check System Info for memory pressure")
@@ -1446,9 +1485,9 @@ def generate_admin_manual():
 
     pdf.section_title("Log Files")
     pdf.body_text(
-        "llama.cpp server logs are stored in data/logs/ and can be viewed "
-        "from the admin panel. Application logs are output to the console "
-        "(stdout/stderr) by the uvicorn server."
+        "LLM server logs are stored in data/logs/ (as server-<id>.log) and "
+        "can be viewed from the admin panel. Application logs are output to "
+        "the console (stdout/stderr) by the uvicorn server."
     )
 
     # Chapter 11: Software Updates
@@ -1728,7 +1767,7 @@ def generate_vault_tutorial():
     # Chapter 7: Exporting Cases
     pdf.chapter_title(7, "Exporting Cases")
     pdf.body_text(
-        "ULF Web provides two export formats for sharing or archiving cases. "
+        "ULF Web provides three export formats for sharing or archiving cases. "
         "Click the Export button in the case detail view to see the options."
     )
     _embed_screenshot(pdf, "08-export-menu.png",
@@ -1740,6 +1779,20 @@ def generate_vault_tutorial():
         "metadata, description, AI summary, and all records with any "
         "embedded images and documents. Ideal for sharing with colleagues "
         "or printing."
+    )
+
+    pdf.section_title("Redacted PDF Export")
+    pdf.body_text(
+        "Generates a PDF with personally identifiable information (PII) "
+        "automatically scrubbed. The case name and identifier are replaced "
+        "with generic labels, and text fields are processed to replace "
+        "email addresses, phone numbers, Icelandic national IDs (kennitala), "
+        "street addresses, postal codes, company names, dates, and other "
+        "PII with placeholders such as {{KENNITALA}}, {{ADDRESS}}, {{EMAIL}}, "
+        "and {{COMPANY}}. Images and document attachments are excluded "
+        "entirely, replaced with a note indicating the omission. "
+        "The exported filename uses the case ID only, avoiding any PII "
+        "in the filename itself."
     )
 
     pdf.section_title("JSON Export")
