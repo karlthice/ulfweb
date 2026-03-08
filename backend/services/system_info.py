@@ -116,7 +116,20 @@ def _get_gpu_vram_nvidia() -> dict | None:
 
         # Use first GPU; values are in MiB
         line = result.stdout.strip().splitlines()[0]
-        total_mib, used_mib, free_mib = (int(v.strip()) for v in line.split(","))
+        values = [v.strip() for v in line.split(",")]
+
+        # Unified memory GPUs (e.g. GB10/Tegra) report [N/A] — fall back to
+        # reporting system RAM as shared GPU memory, like Apple Silicon.
+        if any("[N/A]" in v or "N/A" in v for v in values):
+            ram = get_system_ram()
+            return {
+                "total": ram["total"],
+                "used": ram["used"],
+                "free": ram["available"],
+                "vendor": "nvidia",
+            }
+
+        total_mib, used_mib, free_mib = (int(v) for v in values)
 
         return {
             "total": total_mib * 1024 * 1024,

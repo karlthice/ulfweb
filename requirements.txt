@@ -18,7 +18,7 @@ requests>=2.31.0
 faster-whisper>=1.0.0
 speechbrain>=1.0.0
 torchaudio>=2.0.0
-torchcodec>=0.10.0
+torchcodec>=0.10.0; platform_machine == "x86_64"
 scipy>=1.10.0
 sqlcipher3>=0.5.0
 cryptography>=42.0

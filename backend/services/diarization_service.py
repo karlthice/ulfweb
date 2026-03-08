@@ -26,7 +26,11 @@ class DiarizationService:
         # torchaudio 2.10+ removed list_audio_backends(); patch for speechbrain compat
         import torchaudio
         if not hasattr(torchaudio, "list_audio_backends"):
-            torchaudio.list_audio_backends = lambda: ["torchcodec"]
+            try:
+                import torchcodec  # noqa: F401
+                torchaudio.list_audio_backends = lambda: ["torchcodec"]
+            except ImportError:
+                torchaudio.list_audio_backends = lambda: ["soundfile"]
 
         from speechbrain.inference.speaker import EncoderClassifier
 
