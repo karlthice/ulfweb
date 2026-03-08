@@ -28,18 +28,21 @@ async def lifespan(app: FastAPI):
     # Encrypt existing vault files if needed
     vault.migrate_vault_files()
 
-    # Auto-start servers with autoload enabled
-    servers = await storage.list_servers()
-    for server in servers:
-        if server.active and server.autoload and server.model_path:
-            logger.info("Autoloading server: %s", server.friendly_name)
-            try:
-                await llama_manager.start_server(
-                    server.id, server.model_path, server.url,
-                    parallel=server.parallel, ctx_size=server.ctx_size
-                )
-            except Exception as e:
-                logger.error("Failed to autoload server %s: %s", server.friendly_name, e)
+    # Auto-start servers with autoload enabled (llamacpp only — vllm is managed externally)
+    if settings.llama.type == "llamacpp":
+        servers = await storage.list_servers()
+        for server in servers:
+            if server.active and server.autoload and server.model_path:
+                logger.info("Autoloading server: %s", server.friendly_name)
+                try:
+                    await llama_manager.start_server(
+                        server.id, server.model_path, server.url,
+                        parallel=server.parallel, ctx_size=server.ctx_size
+                    )
+                except Exception as e:
+                    logger.error("Failed to autoload server %s: %s", server.friendly_name, e)
+    else:
+        logger.info("LLM backend type is '%s' — skipping llama.cpp process management", settings.llama.type)
 
     # Log encryption status
     if settings.encryption.enabled:
@@ -52,8 +55,9 @@ async def lifespan(app: FastAPI):
         logger.info("Encryption at rest is DISABLED")
 
     yield
-    # Cleanup llama.cpp processes on shutdown
-    llama_manager.cleanup()
+    # Cleanup llama.cpp processes on shutdown (only relevant for llamacpp backend)
+    if settings.llama.type == "llamacpp":
+        llama_manager.cleanup()
 
 
 app = FastAPI(

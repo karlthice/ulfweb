@@ -3,6 +3,7 @@ server:
   port: 8000
 
 llama:
+  type: "llamacpp"  # "llamacpp" or "vllm"
   url: "http://localhost:8081"
 
 tilde:

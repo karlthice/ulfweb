@@ -26,7 +26,7 @@ async def list_models():
             if response.status_code != 200:
                 raise HTTPException(
                     status_code=503,
-                    detail="Failed to fetch models from llama.cpp server"
+                    detail="Failed to fetch models from LLM server"
                 )
 
             data = response.json()
@@ -45,10 +45,10 @@ async def list_models():
     except httpx.ConnectError:
         raise HTTPException(
             status_code=503,
-            detail="Cannot connect to llama.cpp server"
+            detail="Cannot connect to LLM server"
         )
     except httpx.TimeoutException:
         raise HTTPException(
             status_code=503,
-            detail="Timeout connecting to llama.cpp server"
+            detail="Timeout connecting to LLM server"
         )

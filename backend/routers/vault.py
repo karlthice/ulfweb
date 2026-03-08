@@ -11,6 +11,7 @@ from fastapi import APIRouter, BackgroundTasks, File, Form, HTTPException, Reque
 
 from backend.auth import get_client_ip, require_user
 from backend.encryption import encrypt_file, decrypt_file, is_encrypted
+from backend.services.llm_payload import build_llm_payload
 from backend.models import (
     VaultCase,
     VaultCaseCreate,
@@ -657,13 +658,12 @@ async def generate_case_ai_summary(case_id: int):
             f"Records (chronological):\n" + "\n".join(record_lines)
         )
 
-        payload = {
-            "messages": [{"role": "user", "content": prompt}],
-            "stream": False,
-            "temperature": 0.3,
-            "max_tokens": 1024,
-            "reasoning_budget": 0,
-        }
+        payload = build_llm_payload(
+            [{"role": "user", "content": prompt}],
+            stream=False,
+            temperature=0.3,
+            max_tokens=1024,
+        )
 
         async with httpx.AsyncClient(timeout=120.0) as client:
             response = await client.post(
@@ -756,13 +756,12 @@ async def generate_ai_description(
             return
 
         # Call LLM
-        payload = {
-            "messages": messages,
-            "stream": False,
-            "temperature": 0.3,
-            "max_tokens": 1024,
-            "reasoning_budget": 0,
-        }
+        payload = build_llm_payload(
+            messages,
+            stream=False,
+            temperature=0.3,
+            max_tokens=1024,
+        )
 
         async with httpx.AsyncClient(timeout=120.0) as client:
             response = await client.post(

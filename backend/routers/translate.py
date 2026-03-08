@@ -10,6 +10,7 @@ from fastapi.responses import StreamingResponse
 from backend.auth import get_client_ip, require_user
 from backend.config import settings
 from backend.models import TranslateRequest
+from backend.services.llm_payload import build_llm_payload
 from backend.services.storage import get_admin_settings, get_server, list_servers, log_activity
 
 router = APIRouter(prefix="/translate", tags=["translate"])
@@ -65,12 +66,10 @@ async def stream_translation(
 
     # Build request payload in OpenAI chat format
     # Limit tokens to roughly 2x the input to avoid excessive output
-    payload = {
-        "messages": [{"role": "user", "content": prompt}],
-        "stream": True,
-        "max_tokens": max(256, len(text) * 3),
-        "reasoning_budget": 0,
-    }
+    payload = build_llm_payload(
+        [{"role": "user", "content": prompt}],
+        max_tokens=max(256, len(text) * 3),
+    )
 
     try:
         async with httpx.AsyncClient(timeout=None) as client:
