@@ -426,6 +426,16 @@ const chat = {
                     .replace(/>/g, '&gt;');
                 return `<div class="mermaid-container"><div class="mermaid-diagram" data-processed="false"><pre><code class="language-mermaid">${escapedText}</code></pre></div></div>`;
             }
+            if (lang === 'chart') {
+                const id = chartRenderer.nextId();
+                const safe = text
+                    .replace(/&/g, '&amp;')
+                    .replace(/'/g, '&#39;')
+                    .replace(/"/g, '&quot;')
+                    .replace(/</g, '&lt;')
+                    .replace(/>/g, '&gt;');
+                return `<div class="chart-container" id="${id}" data-chart="${safe}"></div>`;
+            }
             return defaultCode(code, language, escaped);
         };
 
@@ -589,6 +599,7 @@ const chat = {
         contentDiv.className = 'message-content';
         if (role === 'assistant' && content) {
             contentDiv.innerHTML = this.renderMarkdown(content);
+            chartRenderer.renderCharts(contentDiv);
         } else {
             contentDiv.textContent = content;
         }
@@ -690,6 +701,7 @@ const chat = {
                     requestAnimationFrame(() => {
                         renderPending = false;
                         contentDiv.innerHTML = this.renderMarkdown(assistantContent);
+                        chartRenderer.renderCharts(contentDiv);
                         this.scrollToBottom();
                     });
                 }
@@ -710,6 +722,7 @@ const chat = {
                     // Render final markdown
                     contentDiv.innerHTML = this.renderMarkdown(assistantContent);
                     this.renderMermaidDiagrams(contentDiv);
+                    chartRenderer.renderCharts(contentDiv);
                     this.messages.push({ role: 'assistant', content: assistantContent });
 
                     // Add speak button after streaming completes

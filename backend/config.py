@@ -15,6 +15,7 @@ class ServerConfig(BaseModel):
 
 
 class LlamaConfig(BaseModel):
+    type: str = "llamacpp"  # "llamacpp" or "vllm"
     url: str = "http://localhost:8080"
 
 
@@ -88,6 +89,8 @@ def load_config(config_path: str | None = None) -> Settings:
             config_data = yaml.safe_load(f) or {}
 
     # Override with environment variables
+    if os.getenv("ULFWEB_LLAMA_TYPE"):
+        config_data.setdefault("llama", {})["type"] = os.getenv("ULFWEB_LLAMA_TYPE")
     if os.getenv("ULFWEB_LLAMA_URL"):
         config_data.setdefault("llama", {})["url"] = os.getenv("ULFWEB_LLAMA_URL")
     if os.getenv("ULFWEB_TILDE_URL"):

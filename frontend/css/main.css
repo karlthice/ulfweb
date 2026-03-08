@@ -2533,3 +2533,23 @@ html, body {
     flex-shrink: 0;
     width: 100%;
 }
+
+/* Chart Containers in Chat Messages */
+.chart-container {
+    max-width: 100%;
+    margin: 1em 0;
+    padding: 1em;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+}
+
+.chart-container canvas {
+    max-height: 400px;
+}
+
+.chart-container.chart-error {
+    color: var(--error);
+    font-size: 0.85rem;
+    padding: 0.75rem 1rem;
+}

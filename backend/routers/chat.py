@@ -10,6 +10,7 @@ from fastapi.responses import StreamingResponse
 from backend.auth import get_client_ip, require_user
 from backend.config import settings
 from backend.models import ChatRequest
+from backend.services.llm_payload import build_llm_payload
 from backend.services.storage import (
     add_message,
     get_admin_settings,
@@ -131,16 +132,14 @@ async def stream_chat_response(
         })
 
     # Build request payload
-    payload = {
-        "messages": llama_messages,
-        "stream": True,
-        "temperature": user_settings.temperature,
-        "top_k": user_settings.top_k,
-        "top_p": user_settings.top_p,
-        "repeat_penalty": user_settings.repeat_penalty,
-        "max_tokens": user_settings.max_tokens,
-        "reasoning_budget": 0,  # Disable thinking/reasoning tokens
-    }
+    payload = build_llm_payload(
+        llama_messages,
+        temperature=user_settings.temperature,
+        top_k=user_settings.top_k,
+        top_p=user_settings.top_p,
+        repeat_penalty=user_settings.repeat_penalty,
+        max_tokens=user_settings.max_tokens,
+    )
 
     assistant_content = ""
 
@@ -284,7 +283,7 @@ async def stream_chat_response(
             yield f"data: {json.dumps({'type': 'done', 'message_id': None})}\n\n"
 
     except httpx.ConnectError:
-        yield f"data: {json.dumps({'type': 'error', 'content': 'Cannot connect to LLM server. Is llama.cpp running?'})}\n\n"
+        yield f"data: {json.dumps({'type': 'error', 'content': 'Cannot connect to LLM server. Is the LLM server running?'})}\n\n"
     except Exception as e:
         yield f"data: {json.dumps({'type': 'error', 'content': str(e)})}\n\n"
 

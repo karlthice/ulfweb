@@ -265,6 +265,8 @@ async def delete_server_by_id(server_id: int, request: Request):
 async def start_server_process(server_id: int, request: Request):
     """Start a server's llama.cpp process (admin only)."""
     await require_admin(request)
+    if settings.llama.type != "llamacpp":
+        raise HTTPException(status_code=400, detail="Process management is only available for llamacpp backend")
     server = await get_server(server_id)
     if not server:
         raise HTTPException(status_code=404, detail="Server not found")
@@ -288,6 +290,8 @@ async def start_server_process(server_id: int, request: Request):
 async def stop_server_process(server_id: int, request: Request):
     """Stop a server's llama.cpp process (admin only)."""
     await require_admin(request)
+    if settings.llama.type != "llamacpp":
+        raise HTTPException(status_code=400, detail="Process management is only available for llamacpp backend")
     server = await get_server(server_id)
     if not server:
         raise HTTPException(status_code=404, detail="Server not found")
@@ -306,6 +310,8 @@ async def stop_server_process(server_id: int, request: Request):
 async def restart_server_process(server_id: int, request: Request):
     """Restart a server's llama.cpp process (admin only)."""
     await require_admin(request)
+    if settings.llama.type != "llamacpp":
+        raise HTTPException(status_code=400, detail="Process management is only available for llamacpp backend")
     server = await get_server(server_id)
     if not server:
         raise HTTPException(status_code=404, detail="Server not found")
