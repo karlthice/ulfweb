@@ -23,7 +23,7 @@ defaults:
 models:
   path: "/home/karlth/ulfweb/models,/home/karlth/llama.cpp/models"
   llama_server: "/home/karlth/llama.cpp/build/bin/llama-server"
-  vllm_server: "vllm"
+  vllm_server: "/home/karlth/ulfweb/.venv/bin/vllm"
 
 encryption:
   enabled: true

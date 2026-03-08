@@ -199,6 +199,40 @@ info "Upgrading pip, setuptools, wheel..."
 sudo -u "$REAL_USER" .venv/bin/pip install --upgrade pip setuptools wheel -q
 ok "pip tools upgraded"
 
+# ── 3b. Install PyTorch + vLLM (platform-aware, before other deps) ────────
+header "PyTorch & vLLM"
+
+ARCH="$(uname -m)"
+
+if [ "$ARCH" = "aarch64" ] && $HAS_CUDA; then
+    # DGX Spark / aarch64 CUDA: needs cu130 index for GPU-enabled wheels
+    info "aarch64 + CUDA detected — installing PyTorch from cu130 index..."
+    sudo -u "$REAL_USER" .venv/bin/pip install torch torchvision torchaudio \
+        --index-url https://download.pytorch.org/whl/cu130 -q
+    ok "PyTorch (cu130 aarch64) installed"
+
+    info "Installing vLLM from cu130 nightly index..."
+    sudo -u "$REAL_USER" .venv/bin/pip install vllm \
+        --index-url https://wheels.vllm.ai/nightly/cu130 \
+        --extra-index-url https://pypi.org/simple -q
+    ok "vLLM (cu130 aarch64) installed"
+elif [ "$ARCH" = "x86_64" ] && $HAS_CUDA; then
+    # Standard x86_64 CUDA: PyPI wheels include CUDA support
+    info "x86_64 + CUDA detected — installing PyTorch and vLLM..."
+    sudo -u "$REAL_USER" .venv/bin/pip install torch torchvision torchaudio vllm -q
+    ok "PyTorch and vLLM installed"
+elif [ "$OS" = "macos" ]; then
+    # macOS: CPU/Metal — vLLM not supported
+    info "macOS detected — installing PyTorch (Metal)..."
+    sudo -u "$REAL_USER" .venv/bin/pip install torch torchvision torchaudio -q
+    ok "PyTorch installed (vLLM not available on macOS)"
+else
+    # CPU fallback
+    info "No GPU detected — installing PyTorch (CPU)..."
+    sudo -u "$REAL_USER" .venv/bin/pip install torch torchvision torchaudio -q
+    ok "PyTorch installed (CPU only, vLLM skipped)"
+fi
+
 info "Installing Python dependencies from requirements.txt..."
 sudo -u "$REAL_USER" .venv/bin/pip install -r requirements.txt -q
 ok "Python dependencies installed"
@@ -279,6 +313,7 @@ defaults:
 models:
   path: "$MODELS_DIR_ABS,$LLAMA_DIR_ABS/models"
   llama_server: "$LLAMA_SERVER_ABS"
+  vllm_server: "$SCRIPT_DIR/.venv/bin/vllm"
 
 encryption:
   enabled: true

@@ -11,6 +11,9 @@ ExecStart=__INSTALL_DIR__/.venv/bin/python3 -m backend.main
 Restart=on-failure
 RestartSec=5
 Environment=PYTHONUNBUFFERED=1
+Environment=PATH=/usr/local/cuda/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+Environment=LD_LIBRARY_PATH=/usr/local/cuda/lib64
+Environment=CUDA_HOME=/usr/local/cuda
 
 [Install]
 WantedBy=multi-user.target
