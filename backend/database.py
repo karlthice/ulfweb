@@ -552,6 +552,13 @@ async def init_database() -> None:
             )
             await db.commit()
 
+        # Migration: Add llm_backend to admin_settings
+        if "llm_backend" not in admin_columns:
+            await db.execute(
+                "ALTER TABLE admin_settings ADD COLUMN llm_backend TEXT DEFAULT 'llamacpp'"
+            )
+            await db.commit()
+
         # Migration: Append mermaid instruction to existing system prompts
         mermaid_hint = "When asked to create diagrams, charts, or flowcharts, use mermaid syntax in a ```mermaid code block."
         await db.execute(

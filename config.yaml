@@ -23,6 +23,7 @@ defaults:
 models:
   path: "/home/karlth/llama.cpp/models"
   llama_server: "/home/karlth/llama.cpp/build/bin/llama-server"
+  vllm_server: "vllm"
 
 encryption:
   enabled: true

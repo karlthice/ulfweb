@@ -1,4 +1,4 @@
-"""Process manager for llama.cpp servers."""
+"""Process manager for LLM servers (llama.cpp and vLLM)."""
 
 import asyncio
 import logging
@@ -14,7 +14,7 @@ logger = logging.getLogger(__name__)
 
 
 class LlamaManager:
-    """Manages llama.cpp server processes."""
+    """Manages LLM server processes (llama.cpp and vLLM)."""
 
     def __init__(self):
         self.processes: dict[int, subprocess.Popen] = {}  # server_id -> process
@@ -46,6 +46,11 @@ class LlamaManager:
     def _llama_server_path(self) -> str:
         """Get llama-server path from config or environment."""
         return os.environ.get("LLAMA_SERVER_PATH") or settings.models.llama_server
+
+    @property
+    def _vllm_server_path(self) -> str:
+        """Get vllm executable path from config or environment."""
+        return os.environ.get("VLLM_SERVER_PATH") or settings.models.vllm_server
 
     def _extract_port(self, url: str) -> int | None:
         """Extract port from server URL."""
@@ -110,30 +115,8 @@ class LlamaManager:
 
         return None
 
-    async def start_server(
-        self, server_id: int, model_path: str, url: str, parallel: int = 1, ctx_size: int = 32768
-    ) -> bool:
-        """Start a llama.cpp server process."""
-        if not model_path:
-            logger.warning(f"Server {server_id}: No model path configured")
-            return False
-
-        # Check if already running
-        if server_id in self.processes:
-            proc = self.processes[server_id]
-            if proc.poll() is None:  # Process is still running
-                logger.info(f"Server {server_id}: Already running (PID {proc.pid})")
-                return True
-
-        port = self._extract_port(url)
-        if not port:
-            logger.error(f"Server {server_id}: Could not extract port from URL {url}")
-            return False
-
-        # Kill any orphaned process on this port from a previous run
-        self._kill_port_holder(port)
-
-        # Build command
+    def _build_llamacpp_cmd(self, model_path: str, port: int, parallel: int, ctx_size: int) -> list[str]:
+        """Build the llama.cpp server command."""
         cmd = [
             self._llama_server_path,
             "-m", model_path,
@@ -158,24 +141,67 @@ class LlamaManager:
         mmproj = self._find_mmproj_file(model_path)
         if mmproj:
             cmd.extend(["--mmproj", mmproj])
-            logger.info(f"Server {server_id}: Detected vision model, using mmproj: {mmproj}")
+            logger.info(f"Detected vision model, using mmproj: {mmproj}")
 
         # Check for custom chat template
         chat_template = self._find_chat_template_file(model_path)
         if chat_template:
             cmd.extend(["--chat-template-file", chat_template])
-            logger.info(f"Server {server_id}: Using custom chat template: {chat_template}")
+            logger.info(f"Using custom chat template: {chat_template}")
 
-        logger.info(f"Server {server_id}: Starting llama-server with command: {' '.join(cmd)}")
+        return cmd
+
+    def _build_vllm_cmd(self, model_path: str, port: int, ctx_size: int) -> list[str]:
+        """Build the vLLM server command."""
+        return [
+            self._vllm_server_path,
+            "serve", model_path,
+            "--host", "0.0.0.0",
+            "--port", str(port),
+            "--max-model-len", str(ctx_size),
+        ]
+
+    async def start_server(
+        self, server_id: int, model_path: str, url: str,
+        parallel: int = 1, ctx_size: int = 32768, backend: str = "llamacpp"
+    ) -> bool:
+        """Start an LLM server process."""
+        if not model_path:
+            logger.warning(f"Server {server_id}: No model path configured")
+            return False
+
+        # Check if already running
+        if server_id in self.processes:
+            proc = self.processes[server_id]
+            if proc.poll() is None:  # Process is still running
+                logger.info(f"Server {server_id}: Already running (PID {proc.pid})")
+                return True
+
+        port = self._extract_port(url)
+        if not port:
+            logger.error(f"Server {server_id}: Could not extract port from URL {url}")
+            return False
+
+        # Kill any orphaned process on this port from a previous run
+        self._kill_port_holder(port)
+
+        # Build command based on backend type
+        if backend == "vllm":
+            cmd = self._build_vllm_cmd(model_path, port, ctx_size)
+        else:
+            cmd = self._build_llamacpp_cmd(model_path, port, parallel, ctx_size)
+
+        backend_label = "vllm" if backend == "vllm" else "llama-server"
+        logger.info(f"Server {server_id}: Starting {backend_label} with command: {' '.join(cmd)}")
 
         try:
             # Start process with output logged to file for debugging
             log_dir = Path("data/logs")
             log_dir.mkdir(parents=True, exist_ok=True)
-            log_file = log_dir / f"llama-server-{server_id}.log"
+            log_file = log_dir / f"server-{server_id}.log"
 
             with open(log_file, "a") as f:
-                f.write(f"\n--- Starting server {server_id} at {asyncio.get_event_loop().time()} ---\n")
+                f.write(f"\n--- Starting server {server_id} ({backend_label}) at {asyncio.get_event_loop().time()} ---\n")
                 f.write(f"Command: {' '.join(cmd)}\n")
 
             log_handle = open(log_file, "a")
@@ -201,14 +227,15 @@ class LlamaManager:
             return True
 
         except FileNotFoundError:
-            logger.error(f"Server {server_id}: llama-server not found at {self._llama_server_path}")
+            exe = self._vllm_server_path if backend == "vllm" else self._llama_server_path
+            logger.error(f"Server {server_id}: {backend_label} not found at {exe}")
             return False
         except Exception as e:
             logger.error(f"Server {server_id}: Failed to start: {e}")
             return False
 
     async def stop_server(self, server_id: int) -> bool:
-        """Stop a llama.cpp server process."""
+        """Stop an LLM server process."""
         if server_id not in self.processes:
             logger.info(f"Server {server_id}: No process tracked")
             return True
@@ -250,12 +277,13 @@ class LlamaManager:
         return proc.poll() is None
 
     async def restart_server(
-        self, server_id: int, model_path: str, url: str, parallel: int = 1, ctx_size: int = 32768
+        self, server_id: int, model_path: str, url: str,
+        parallel: int = 1, ctx_size: int = 32768, backend: str = "llamacpp"
     ) -> bool:
-        """Restart a llama.cpp server process."""
+        """Restart an LLM server process."""
         await self.stop_server(server_id)
         await asyncio.sleep(0.5)  # Brief delay before restart
-        return await self.start_server(server_id, model_path, url, parallel, ctx_size)
+        return await self.start_server(server_id, model_path, url, parallel, ctx_size, backend)
 
     def cleanup(self):
         """Stop all managed processes (for shutdown)."""

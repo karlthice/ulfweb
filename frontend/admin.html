@@ -43,6 +43,17 @@
                 </div>
                 <p class="section-description">Configure the LLM servers that ULF can connect to.</p>
 
+                <div class="settings-form">
+                    <div class="setting-group">
+                        <label for="llm-backend-select">LLM Backend</label>
+                        <select id="llm-backend-select">
+                            <option value="llamacpp">llama.cpp</option>
+                            <option value="vllm">vLLM</option>
+                        </select>
+                        <p class="setting-hint">Select the LLM inference engine. Changing this will require restarting all servers.</p>
+                    </div>
+                </div>
+
                 <div class="servers-list" id="servers-list">
                     <!-- Servers will be loaded here -->
                 </div>
@@ -255,9 +266,9 @@
                     <select id="server-model-path">
                         <option value="">-- Select a model --</option>
                     </select>
-                    <p class="setting-hint">Select a GGUF model file (optional).</p>
+                    <p class="setting-hint" id="server-model-hint">Select a GGUF model file (optional).</p>
                 </div>
-                <div class="setting-group">
+                <div class="setting-group" id="server-parallel-group">
                     <label for="server-parallel">Parallel Slots</label>
                     <select id="server-parallel">
                         <option value="1">1</option>
@@ -265,7 +276,7 @@
                         <option value="3">3</option>
                         <option value="4">4</option>
                     </select>
-                    <p class="setting-hint">Number of parallel inference slots.</p>
+                    <p class="setting-hint">Number of parallel inference slots (llama.cpp only).</p>
                 </div>
                 <div class="setting-group">
                     <label for="server-ctx-size">Context Size</label>

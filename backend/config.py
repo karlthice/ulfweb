@@ -39,6 +39,7 @@ class DefaultsConfig(BaseModel):
 class ModelsConfig(BaseModel):
     path: str = ""
     llama_server: str = "llama-server"
+    vllm_server: str = "vllm"
 
 
 class EncryptionConfig(BaseModel):
@@ -102,6 +103,8 @@ def load_config(config_path: str | None = None) -> Settings:
         config_data.setdefault("models", {})["path"] = os.getenv("ULFWEB_MODELS_PATH")
     if os.getenv("ULFWEB_LLAMA_SERVER"):
         config_data.setdefault("models", {})["llama_server"] = os.getenv("ULFWEB_LLAMA_SERVER")
+    if os.getenv("ULFWEB_VLLM_SERVER"):
+        config_data.setdefault("models", {})["vllm_server"] = os.getenv("ULFWEB_VLLM_SERVER")
     if os.getenv("ULFWEB_ENCRYPTION_ENABLED"):
         config_data.setdefault("encryption", {})["enabled"] = os.getenv("ULFWEB_ENCRYPTION_ENABLED").lower() in ("true", "1", "yes")
     if os.getenv("ULFWEB_ENCRYPTION_KEY_FILE"):

@@ -181,13 +181,6 @@ async def export_case_pdf(case_id: int, request: Request):
             if r.record_type == "document" and r.filename and (r.original_filename or "").lower().endswith(".pdf"):
                 _embed_pdf_pages(pdf, VAULT_DIR / r.filename)
 
-            # AI description (document/image records)
-            if r.ai_description:
-                pdf.set_font("DejaVu", "", 9)
-                pdf.set_text_color(80, 80, 80)
-                pdf.multi_cell(0, 5, f"AI Description: {r.ai_description}")
-                pdf.set_text_color(0, 0, 0)
-
     # Footer with export timestamp
     pdf.ln(10)
     pdf.set_font("DejaVu", "", 8)
@@ -197,6 +190,104 @@ async def export_case_pdf(case_id: int, request: Request):
 
     pdf_bytes = pdf.output()
     filename = _safe_export_filename(case, "pdf")
+
+    return Response(
+        content=bytes(pdf_bytes),
+        media_type="application/pdf",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
+@router.get("/cases/{case_id}/export/redacted")
+async def export_case_redacted_pdf(case_id: int, request: Request):
+    """Export a redacted case PDF with PII scrubbed and no images/documents."""
+    from datetime import datetime
+    from fastapi.responses import Response
+    from fpdf import FPDF
+    from backend.services.redaction import redact_text
+
+    user = await require_user(request)
+    case = await storage.get_vault_case(case_id, user["id"])
+    if not case:
+        raise HTTPException(status_code=404, detail="Case not found")
+
+    pdf = FPDF()
+    pdf.set_auto_page_break(auto=True, margin=20)
+
+    _font_dir = "/usr/share/fonts/truetype/dejavu"
+    pdf.add_font("DejaVu", "", f"{_font_dir}/DejaVuSans.ttf", uni=True)
+    pdf.add_font("DejaVu", "B", f"{_font_dir}/DejaVuSans-Bold.ttf", uni=True)
+
+    pdf.add_page()
+
+    # Title — redacted
+    pdf.set_font("DejaVu", "B", 18)
+    pdf.cell(0, 10, "REDACTED CASE", new_x="LMARGIN", new_y="NEXT")
+
+    # Metadata line — redacted
+    pdf.set_font("DejaVu", "", 10)
+    meta_parts = [
+        "Identifier: REDACTED",
+        f"Status: {case.status}",
+        "Public" if case.is_public else "Private",
+    ]
+    pdf.set_text_color(100, 100, 100)
+    pdf.cell(0, 6, "  |  ".join(meta_parts), new_x="LMARGIN", new_y="NEXT")
+    pdf.set_text_color(0, 0, 0)
+
+    # Description — redacted
+    if case.description:
+        pdf.ln(4)
+        pdf.set_font("DejaVu", "", 10)
+        pdf.multi_cell(0, 5, redact_text(case.description))
+
+    # AI Summary — redacted
+    if case.ai_summary:
+        pdf.ln(6)
+        pdf.set_font("DejaVu", "B", 12)
+        pdf.cell(0, 8, "AI Summary", new_x="LMARGIN", new_y="NEXT")
+        pdf.set_font("DejaVu", "", 10)
+        pdf.multi_cell(0, 5, redact_text(case.ai_summary))
+
+    # Records
+    records = case.records or []
+    if records:
+        pdf.ln(6)
+        pdf.set_font("DejaVu", "B", 12)
+        pdf.cell(0, 8, f"Records ({len(records)})", new_x="LMARGIN", new_y="NEXT")
+
+        for r in records:
+            pdf.ln(4)
+            pdf.set_draw_color(200, 200, 200)
+            pdf.line(pdf.l_margin, pdf.get_y(), pdf.w - pdf.r_margin, pdf.get_y())
+            pdf.ln(2)
+
+            # Record header — title redacted
+            pdf.set_font("DejaVu", "B", 10)
+            starred = "[*] " if r.starred else ""
+            title = redact_text(r.title) or "Untitled"
+            pdf.cell(0, 6, f"{starred}{r.record_date}  -  {title}  ({r.record_type})", new_x="LMARGIN", new_y="NEXT")
+
+            # Content (text records) — redacted
+            if r.content:
+                pdf.set_font("DejaVu", "", 10)
+                pdf.multi_cell(0, 5, redact_text(r.content))
+
+            # Skip images and documents — just note the omission
+            if r.record_type in ("image", "document") and r.filename:
+                pdf.set_font("DejaVu", "", 9)
+                pdf.set_text_color(100, 100, 100)
+                pdf.cell(0, 5, "[Attachment omitted from redacted export]", new_x="LMARGIN", new_y="NEXT")
+                pdf.set_text_color(0, 0, 0)
+
+    # Footer with export timestamp and redaction label
+    pdf.ln(10)
+    pdf.set_font("DejaVu", "", 8)
+    pdf.set_text_color(150, 150, 150)
+    pdf.cell(0, 5, f"REDACTED EXPORT — Exported {datetime.utcnow().strftime('%Y-%m-%d %H:%M UTC')}", new_x="LMARGIN", new_y="NEXT")
+
+    pdf_bytes = pdf.output()
+    filename = f"Redacted_Case_{case_id}.pdf"
 
     return Response(
         content=bytes(pdf_bytes),
@@ -662,8 +753,9 @@ async def generate_case_ai_summary(case_id: int):
             "stream": False,
             "temperature": 0.3,
             "max_tokens": 1024,
-            "reasoning_budget": 0,
         }
+        if admin_settings.llm_backend != "vllm":
+            payload["reasoning_budget"] = 0
 
         async with httpx.AsyncClient(timeout=120.0) as client:
             response = await client.post(
@@ -761,8 +853,9 @@ async def generate_ai_description(
             "stream": False,
             "temperature": 0.3,
             "max_tokens": 1024,
-            "reasoning_budget": 0,
         }
+        if admin_settings.llm_backend != "vllm":
+            payload["reasoning_budget"] = 0
 
         async with httpx.AsyncClient(timeout=120.0) as client:
             response = await client.post(

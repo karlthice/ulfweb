@@ -217,6 +217,7 @@ class AdminSettings(BaseModel):
     vault_chat_records: int = 10
     date_format: str = "YYYY-MM-DD"
     single_user: str = ""
+    llm_backend: str = "llamacpp"
 
 
 class AdminSettingsUpdate(BaseModel):
@@ -232,6 +233,7 @@ class AdminSettingsUpdate(BaseModel):
     vault_chat_records: int | None = None
     date_format: str | None = None
     single_user: str | None = None
+    llm_backend: str | None = None
 
 
 # Vault models

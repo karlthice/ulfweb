@@ -137,10 +137,15 @@ async def stream_chat_response(
         "temperature": user_settings.temperature,
         "top_k": user_settings.top_k,
         "top_p": user_settings.top_p,
-        "repeat_penalty": user_settings.repeat_penalty,
         "max_tokens": user_settings.max_tokens,
-        "reasoning_budget": 0,  # Disable thinking/reasoning tokens
     }
+
+    # Backend-specific parameters
+    if admin_cfg.llm_backend == "vllm":
+        payload["repetition_penalty"] = user_settings.repeat_penalty
+    else:
+        payload["repeat_penalty"] = user_settings.repeat_penalty
+        payload["reasoning_budget"] = 0  # Disable thinking/reasoning tokens
 
     assistant_content = ""
 

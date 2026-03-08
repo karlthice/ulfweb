@@ -34,6 +34,7 @@ async def lifespan(app: FastAPI):
     vault.migrate_vault_files()
 
     # Auto-start servers with autoload enabled
+    admin_cfg = await storage.get_admin_settings()
     servers = await storage.list_servers()
     for server in servers:
         if server.active and server.autoload and server.model_path:
@@ -41,7 +42,8 @@ async def lifespan(app: FastAPI):
             try:
                 await llama_manager.start_server(
                     server.id, server.model_path, server.url,
-                    parallel=server.parallel, ctx_size=server.ctx_size
+                    parallel=server.parallel, ctx_size=server.ctx_size,
+                    backend=admin_cfg.llm_backend
                 )
             except Exception as e:
                 logger.error("Failed to autoload server %s: %s", server.friendly_name, e)

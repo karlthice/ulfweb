@@ -176,6 +176,14 @@ const admin = {
             this.saveDocumentAiSetting('date_format', e.target.value);
         });
 
+        // LLM backend dropdown
+        document.getElementById('llm-backend-select').addEventListener('change', (e) => {
+            this.saveDocumentAiSetting('llm_backend', e.target.value);
+            this.updateBackendUI(e.target.value);
+            // Reload models list since available models differ by backend
+            this.loadModels();
+        });
+
         // System Info button
         document.getElementById('system-info-btn').addEventListener('click', () => {
             this.openSystemInfoModal();
@@ -1097,8 +1105,31 @@ const admin = {
             dateFormatSelect.value = this.adminSettings.date_format;
         }
 
+        // Set LLM backend dropdown
+        const llmBackendSelect = document.getElementById('llm-backend-select');
+        if (llmBackendSelect && this.adminSettings.llm_backend) {
+            llmBackendSelect.value = this.adminSettings.llm_backend;
+        }
+        this.updateBackendUI(this.adminSettings.llm_backend || 'llamacpp');
+
         // Populate single-user dropdown
         this.populateSingleUserDropdown();
+    },
+
+    /**
+     * Update UI elements based on the selected LLM backend
+     */
+    updateBackendUI(backend) {
+        const parallelGroup = document.getElementById('server-parallel-group');
+        const modelHint = document.getElementById('server-model-hint');
+        if (parallelGroup) {
+            parallelGroup.style.display = backend === 'vllm' ? 'none' : '';
+        }
+        if (modelHint) {
+            modelHint.textContent = backend === 'vllm'
+                ? 'Select a model (GGUF or HuggingFace directory).'
+                : 'Select a GGUF model file (optional).';
+        }
     },
 
     /**
@@ -1147,7 +1178,7 @@ const admin = {
             // Server IDs are strings from dropdowns — parse to int or null
             // Booleans (e.g. skip_contextual_retrieval) pass through as-is
             // String settings (e.g. whisper_model) pass through as-is
-            const stringSettings = ['whisper_model', 'date_format'];
+            const stringSettings = ['whisper_model', 'date_format', 'llm_backend'];
             const intSettings = ['vault_chat_records'];
             let parsed;
             if (typeof value === 'boolean') {

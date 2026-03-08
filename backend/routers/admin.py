@@ -82,6 +82,31 @@ def _scan_model_files(models_path: str) -> list[dict]:
     return results
 
 
+def _scan_hf_model_dirs(models_path: str) -> list[dict]:
+    """Scan for HuggingFace model directories (for vLLM)."""
+    results = []
+    seen = set()
+    for raw_dir in models_path.split(","):
+        d = Path(raw_dir.strip())
+        if not d.exists() or not d.is_dir():
+            continue
+        for subdir in sorted(d.iterdir()):
+            if not subdir.is_dir():
+                continue
+            # A HuggingFace model directory contains config.json
+            if (subdir / "config.json").exists() and subdir.name not in seen:
+                seen.add(subdir.name)
+                # Sum up all files in the directory for size
+                total_size = sum(f.stat().st_size for f in subdir.rglob("*") if f.is_file())
+                results.append({
+                    "path": subdir,
+                    "name": subdir.name,
+                    "size_bytes": total_size,
+                    "mtime": subdir.stat().st_mtime,
+                })
+    return results
+
+
 def _find_free_port() -> int:
     """Find a free port by letting the OS assign one."""
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
@@ -136,16 +161,25 @@ async def system_info():
 
 @router.get("/models")
 async def get_available_models():
-    """List available .gguf model files from the configured models directories."""
+    """List available model files from the configured models directories."""
     models_path = settings.models.path
 
     if not models_path:
         return {"models": [], "configured": False}
 
+    admin_cfg = await get_admin_settings()
     min_size = 100 * 1024 * 1024  # 100 MB
+
+    if admin_cfg.llm_backend == "vllm":
+        # For vLLM: scan for HuggingFace model directories and GGUF files
+        all_models = _scan_hf_model_dirs(models_path) + _scan_model_files(models_path)
+    else:
+        # For llama.cpp: scan for GGUF files only
+        all_models = _scan_model_files(models_path)
+
     models = [
         {"filename": m["name"], "path": str(m["path"]), "size_bytes": m["size_bytes"]}
-        for m in _scan_model_files(models_path)
+        for m in all_models
         if m["size_bytes"] >= min_size
     ]
 
@@ -185,10 +219,12 @@ async def add_server(data: ServerCreate, request: Request):
         ctx_size=data.ctx_size
     )
 
-    # Start llama.cpp process if server is active and has a model path
+    # Start LLM process if server is active and has a model path
     if server.active and server.model_path:
+        admin_cfg = await get_admin_settings()
         await llama_manager.start_server(
-            server.id, server.model_path, server.url, server.parallel, server.ctx_size
+            server.id, server.model_path, server.url, server.parallel, server.ctx_size,
+            backend=admin_cfg.llm_backend
         )
 
     ip = get_client_ip(request)
@@ -222,12 +258,14 @@ async def update_server_by_id(server_id: int, data: ServerUpdate, request: Reque
     model_path_changed = "model_path" in updates and updates["model_path"] != old_server.model_path
     ctx_size_changed = "ctx_size" in updates and updates["ctx_size"] != old_server.ctx_size
 
+    admin_cfg = await get_admin_settings()
     if active_changed:
         if new_server.active:
             # Server activated - start process
             if new_server.model_path:
                 await llama_manager.start_server(
-                    server_id, new_server.model_path, new_server.url, new_server.parallel, new_server.ctx_size
+                    server_id, new_server.model_path, new_server.url, new_server.parallel, new_server.ctx_size,
+                    backend=admin_cfg.llm_backend
                 )
         else:
             # Server deactivated - stop process
@@ -236,7 +274,8 @@ async def update_server_by_id(server_id: int, data: ServerUpdate, request: Reque
         # Server is active and parallel/model/ctx_size changed - restart
         if new_server.model_path:
             await llama_manager.restart_server(
-                server_id, new_server.model_path, new_server.url, new_server.parallel, new_server.ctx_size
+                server_id, new_server.model_path, new_server.url, new_server.parallel, new_server.ctx_size,
+                backend=admin_cfg.llm_backend
             )
 
     ip = get_client_ip(request)
@@ -263,7 +302,7 @@ async def delete_server_by_id(server_id: int, request: Request):
 
 @router.post("/servers/{server_id}/start")
 async def start_server_process(server_id: int, request: Request):
-    """Start a server's llama.cpp process (admin only)."""
+    """Start a server's LLM process (admin only)."""
     await require_admin(request)
     server = await get_server(server_id)
     if not server:
@@ -272,8 +311,10 @@ async def start_server_process(server_id: int, request: Request):
     if not server.model_path:
         raise HTTPException(status_code=400, detail="Server has no model path configured")
 
+    admin_cfg = await get_admin_settings()
     success = await llama_manager.start_server(
-        server_id, server.model_path, server.url, server.parallel, server.ctx_size
+        server_id, server.model_path, server.url, server.parallel, server.ctx_size,
+        backend=admin_cfg.llm_backend
     )
 
     if not success:
@@ -304,7 +345,7 @@ async def stop_server_process(server_id: int, request: Request):
 
 @router.post("/servers/{server_id}/restart")
 async def restart_server_process(server_id: int, request: Request):
-    """Restart a server's llama.cpp process (admin only)."""
+    """Restart a server's LLM process (admin only)."""
     await require_admin(request)
     server = await get_server(server_id)
     if not server:
@@ -316,8 +357,10 @@ async def restart_server_process(server_id: int, request: Request):
     if not server.active:
         raise HTTPException(status_code=400, detail="Server is not active")
 
+    admin_cfg = await get_admin_settings()
     success = await llama_manager.restart_server(
-        server_id, server.model_path, server.url, server.parallel, server.ctx_size
+        server_id, server.model_path, server.url, server.parallel, server.ctx_size,
+        backend=admin_cfg.llm_backend
     )
 
     if not success:
@@ -335,7 +378,10 @@ async def get_server_log(server_id: int, tail: int = 200):
     if not server:
         raise HTTPException(status_code=404, detail="Server not found")
 
-    log_path = Path("data/logs") / f"llama-server-{server_id}.log"
+    log_path = Path("data/logs") / f"server-{server_id}.log"
+    # Fall back to old log filename for existing installations
+    if not log_path.exists():
+        log_path = Path("data/logs") / f"llama-server-{server_id}.log"
     filename = log_path.name
     if not log_path.exists():
         return {"log": "", "filename": filename}

@@ -69,8 +69,9 @@ async def stream_translation(
         "messages": [{"role": "user", "content": prompt}],
         "stream": True,
         "max_tokens": max(256, len(text) * 3),
-        "reasoning_budget": 0,
     }
+    if admin_settings.llm_backend != "vllm":
+        payload["reasoning_budget"] = 0
 
     try:
         async with httpx.AsyncClient(timeout=None) as client:
