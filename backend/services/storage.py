@@ -737,7 +737,7 @@ async def get_admin_settings() -> AdminSettings:
                       document_ai_understanding_server_id, translation_server_id,
                       chat_server_id, skip_contextual_retrieval, whisper_model,
                       vault_image_server_id, vault_text_server_id,
-                      vault_chat_records, date_format, single_user
+                      vault_chat_records, date_format, single_user, llm_backend
                FROM admin_settings WHERE id = 1"""
         )
         row = await cursor.fetchone()
@@ -755,6 +755,7 @@ async def get_admin_settings() -> AdminSettings:
                 vault_chat_records=row["vault_chat_records"] if row["vault_chat_records"] is not None else 10,
                 date_format=row["date_format"] or "YYYY-MM-DD",
                 single_user=row["single_user"] or "",
+                llm_backend=row["llm_backend"] or "llamacpp",
             )
         return AdminSettings()
 
@@ -774,6 +775,7 @@ async def update_admin_settings(updates: dict[str, Any]) -> AdminSettings:
         "vault_chat_records",
         "date_format",
         "single_user",
+        "llm_backend",
     )
     async with get_db() as db:
         # Ensure row exists

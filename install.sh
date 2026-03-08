@@ -9,6 +9,12 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$SCRIPT_DIR"
 
+# ── Resolve the real (non-root) user ──────────────────────────────────────
+# When run via "sudo bash install.sh", SUDO_USER holds the invoking user.
+# Fall back to whoami for non-sudo invocations.
+REAL_USER="${SUDO_USER:-$(whoami)}"
+REAL_HOME=$(eval echo "~$REAL_USER")
+
 # ── Colors ──────────────────────────────────────────────────────────────────
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -181,7 +187,7 @@ if [ -d ".venv" ]; then
     ok "Virtual environment already exists"
 else
     info "Creating virtual environment..."
-    "$PYTHON_CMD" -m venv .venv
+    sudo -u "$REAL_USER" "$PYTHON_CMD" -m venv .venv
     ok "Virtual environment created"
 fi
 
@@ -190,11 +196,11 @@ fi
 source .venv/bin/activate
 
 info "Upgrading pip, setuptools, wheel..."
-pip install --upgrade pip setuptools wheel -q
+sudo -u "$REAL_USER" .venv/bin/pip install --upgrade pip setuptools wheel -q
 ok "pip tools upgraded"
 
 info "Installing Python dependencies from requirements.txt..."
-pip install -r requirements.txt -q
+sudo -u "$REAL_USER" .venv/bin/pip install -r requirements.txt -q
 ok "Python dependencies installed"
 
 # ── 4. Build llama.cpp ──────────────────────────────────────────────────────
@@ -206,7 +212,7 @@ if [ -d "$LLAMA_DIR" ]; then
     ok "llama.cpp already cloned at $LLAMA_DIR"
 else
     info "Cloning llama.cpp..."
-    git clone https://github.com/ggml-org/llama.cpp.git "$LLAMA_DIR"
+    sudo -u "$REAL_USER" git clone https://github.com/ggml-org/llama.cpp.git "$LLAMA_DIR"
     ok "llama.cpp cloned"
 fi
 
@@ -223,8 +229,8 @@ else
 fi
 
 info "Building llama.cpp..."
-cmake -S "$LLAMA_DIR" -B "$LLAMA_DIR/build" "${CMAKE_ARGS[@]}" -DCMAKE_BUILD_TYPE=Release -Wno-dev 2>&1 | tail -3
-cmake --build "$LLAMA_DIR/build" --config Release -j "$(nproc 2>/dev/null || sysctl -n hw.ncpu 2>/dev/null || echo 4)" 2>&1 | tail -5
+sudo -u "$REAL_USER" cmake -S "$LLAMA_DIR" -B "$LLAMA_DIR/build" "${CMAKE_ARGS[@]}" -DCMAKE_BUILD_TYPE=Release -Wno-dev 2>&1 | tail -3
+sudo -u "$REAL_USER" cmake --build "$LLAMA_DIR/build" --config Release -j "$(nproc 2>/dev/null || sysctl -n hw.ncpu 2>/dev/null || echo 4)" 2>&1 | tail -5
 
 LLAMA_SERVER="$LLAMA_DIR/build/bin/llama-server"
 if [ -f "$LLAMA_SERVER" ]; then
@@ -278,6 +284,7 @@ encryption:
   enabled: true
   key_file: "data/encryption.key"
 YAML
+    chown "$REAL_USER":"$REAL_USER" config.yaml
     ok "config.yaml created"
 fi
 
@@ -288,10 +295,13 @@ for dir in data data/logs data/voices models; do
     if [ -d "$dir" ]; then
         ok "$dir/ exists"
     else
-        mkdir -p "$dir"
+        sudo -u "$REAL_USER" mkdir -p "$dir"
         ok "$dir/ created"
     fi
 done
+
+# Ensure ownership of all user-writable directories
+chown -R "$REAL_USER":"$REAL_USER" .venv data models 2>/dev/null || true
 
 # ── 7. Caddy Reverse Proxy & HTTPS ──────────────────────────────────────────
 header "Caddy Reverse Proxy & HTTPS"
@@ -385,7 +395,7 @@ fi
 if ! $SKIP_SYSTEMD; then
     # Fill in placeholders and install ulfweb.service
     info "Installing ulfweb.service..."
-    sed -e "s|__USER__|$(whoami)|g" \
+    sed -e "s|__USER__|$REAL_USER|g" \
         -e "s|__INSTALL_DIR__|$SCRIPT_DIR|g" \
         ulfweb.service > /tmp/ulfweb.service
     sudo cp /tmp/ulfweb.service /etc/systemd/system/ulfweb.service
@@ -396,13 +406,25 @@ if ! $SKIP_SYSTEMD; then
     if command -v caddy &>/dev/null; then
         CADDY_BIN_PATH="$(which caddy)"
         info "Installing ulfweb-caddy.service..."
-        sed -e "s|__USER__|$(whoami)|g" \
+        sed -e "s|__USER__|$REAL_USER|g" \
             -e "s|__INSTALL_DIR__|$SCRIPT_DIR|g" \
             -e "s|__CADDY_BIN__|$CADDY_BIN_PATH|g" \
             ulfweb-caddy.service > /tmp/ulfweb-caddy.service
         sudo cp /tmp/ulfweb-caddy.service /etc/systemd/system/ulfweb-caddy.service
         rm /tmp/ulfweb-caddy.service
         ok "ulfweb-caddy.service installed"
+    fi
+
+    # Allow the service user to restart ulfweb without a password (for admin UI)
+    SUDOERS_FILE="/etc/sudoers.d/ulfweb"
+    SUDOERS_LINE="$REAL_USER ALL=(ALL) NOPASSWD: /usr/bin/systemctl restart ulfweb"
+    if [ ! -f "$SUDOERS_FILE" ] || ! grep -qF "$SUDOERS_LINE" "$SUDOERS_FILE" 2>/dev/null; then
+        info "Granting $REAL_USER passwordless sudo for systemctl restart ulfweb..."
+        echo "$SUDOERS_LINE" | sudo tee "$SUDOERS_FILE" > /dev/null
+        sudo chmod 440 "$SUDOERS_FILE"
+        ok "Sudoers rule installed"
+    else
+        ok "Sudoers rule already configured"
     fi
 
     sudo systemctl daemon-reload

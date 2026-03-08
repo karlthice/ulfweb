@@ -3,6 +3,7 @@
 import asyncio
 import os
 import re
+import subprocess
 import socket
 import sys
 import time
@@ -407,7 +408,8 @@ async def get_server_process_status(server_id: int):
 async def restart_ulfweb(request: Request):
     """Restart the entire ULF Web application (admin only).
 
-    Touches main.py to trigger uvicorn's file-change reloader.
+    Uses systemctl if running as a systemd service, otherwise touches
+    main.py to trigger uvicorn's file-change reloader.
     """
     await require_admin(request)
     ip = get_client_ip(request)
@@ -415,9 +417,16 @@ async def restart_ulfweb(request: Request):
 
     def _do_restart():
         llama_manager.cleanup()
-        # Touch a source file to trigger uvicorn's WatchFiles reloader
-        main_py = Path(__file__).parent.parent / "main.py"
-        main_py.touch()
+        # Prefer systemctl restart if running under systemd
+        if os.environ.get("INVOCATION_ID"):
+            subprocess.Popen(
+                ["sudo", "-n", "systemctl", "restart", "ulfweb"],
+                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+            )
+        else:
+            # Touch a source file to trigger uvicorn's WatchFiles reloader
+            main_py = Path(__file__).parent.parent / "main.py"
+            main_py.touch()
 
     asyncio.get_event_loop().call_later(0.5, _do_restart)
     return {"status": "restarting"}
